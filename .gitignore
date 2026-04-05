@@ -1,0 +1,12 @@
+# ignore prep folder
+/workspace/project_prep/
+
+# build files
+*.o
+server
+
+# mac
+.DS_Store
+
+# vscode
+.vscode/

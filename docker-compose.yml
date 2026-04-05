@@ -1,0 +1,21 @@
+services:
+  web-dev:
+    image: webserver-web-dev:latest
+    build:
+      context: .
+      network: host   # IMPORTANT: avoids DNS/VPN build issues
+    container_name: sys-web-dev
+    volumes:
+      - ./workspace:/workspace
+    ports:
+      - "8080:8080"
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+    stdin_open: true
+    tty: true
+
+    cap_add:
+      - SYS_PTRACE
+    security_opt:
+      - seccomp=unconfined
