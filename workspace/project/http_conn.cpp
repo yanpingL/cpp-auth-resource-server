@@ -129,9 +129,9 @@ void http_conn::init(){
     m_read_index = 0;
     m_write_index = 0;
 
-    api_req = 0;
     json_res = "";
     apireq = 0;
+    api_ret = NO_REQUEST;
 
     memset(m_read_buf, 0, READ_BUFFER_SIZE);
     memset(m_write_buf, 0, READ_BUFFER_SIZE);
@@ -258,7 +258,6 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char * text){
 
     // check if the request is GET /api/user?id=x HTTP/1.1 
     if(strncmp(m_url, "/api/user", 9) == 0 && m_method == GET){
-        api_req = m_url;
         return handle_get_user();
     } else {
         return BAD_REQUEST;
@@ -330,6 +329,7 @@ http_conn::HTTP_CODE http_conn::handle_get_user(){
     // add_content(json_str.c_str());
     m_check_stat = CHECK_STATE_HEADER;
     apireq = 1;
+    api_ret = GET_USER;
 
     return NO_REQUEST;
 }
@@ -373,7 +373,7 @@ http_conn::HTTP_CODE http_conn::parse_headers(char * text){
         }
         // parsed complete HTTP request
         if (apireq){
-            return GET_USER;
+            return api_ret;
         }
         return GET_REQUEST;
 
@@ -414,7 +414,7 @@ http_conn::HTTP_CODE http_conn::parse_content(char * text){
     {
         text[ m_content_length ] = '\0';
         if (apireq){
-            return GET_USER;
+            return api_ret;
         }
         return GET_REQUEST;
     }
@@ -458,17 +458,20 @@ http_conn::HTTP_CODE http_conn::process_read(){
                 ret = parse_headers(text);
                 if(ret == BAD_REQUEST){
                     return BAD_REQUEST;
+                } else if (apireq){
+                    return api_ret;
                 } else if (ret == GET_REQUEST){
                     return do_request();
-                } else if (ret == GET_USER){
-                    return GET_USER;
-                }
+                } 
                 break;
             }
             // parse body
             case CHECK_STATE_CONTENT:
             {
                 ret = parse_content(text);
+                if(apireq){
+                    return api_ret;
+                }
                 if (ret== GET_REQUEST){
                     return do_request();
                 }
@@ -684,7 +687,6 @@ bool http_conn::add_headers(int content_len, const char* type) {
     add_content_type(type);
     add_linger();
     add_blank_line();
-
 }
 
 
@@ -718,7 +720,6 @@ bool http_conn::add_content( const char* content )
 // }
 
 
-// 根据服务器处理HTTP请求的结果，决定返回给客户端的内容
 // write the response to the write buffer
 bool http_conn::process_write(HTTP_CODE ret) {
     switch (ret)

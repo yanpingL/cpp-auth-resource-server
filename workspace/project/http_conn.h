@@ -133,9 +133,9 @@ private:
     int m_content_length;                   // HTTP请求的消息总长度
     bool m_linger;                          // HTTP请求是否要求保持连接
 
-    char* api_req;                          // possible api request 
-    std::string json_res;
-    bool apireq;
+    std::string json_res;                   // string to store the JSON format result
+    bool apireq;                            // check if it's api request
+    HTTP_CODE api_ret;                       // private variable to record the api request HTTP_CODE
 
     char m_write_buf[ WRITE_BUFFER_SIZE ];  // 写缓冲区
     int m_write_index;                        // 写缓冲区中待发送的字节数
