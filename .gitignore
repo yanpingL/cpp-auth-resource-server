@@ -5,6 +5,8 @@
 *.o
 server
 
+.devcontainer/
+
 # mac
 .DS_Store
 
