@@ -141,6 +141,7 @@ void http_conn::init(){
 
 // repeately read data from client until no more data or connection closed
 // read data from the connection socket fd and store them in the read buffer
+// This function is called in MAIN THREAD by corresponding http_conn object
 bool http_conn::read(){
     if(m_read_index >= READ_BUFFER_SIZE)
         return false;
@@ -178,6 +179,9 @@ bool http_conn::read(){
     return true;
 }
 
+
+
+// From this position, the functions below called in CHILDREN THREADS (individual http_conn object)
 // parse one line, check based on \r\n
 /*
 .......\r\n
@@ -239,8 +243,8 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char * text){
     // need to update to other METHODS
     if (strcasecmp(method, "GET") == 0){
         m_method = GET;
-    } else {
-        return BAD_REQUEST;
+    } else if (strcasecmp(method, "POST") == 0){
+        m_method = POST;
     }
 
     // check the HTTP version: /index.html HTTP/1.1
@@ -256,13 +260,22 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char * text){
         return BAD_REQUEST;
     }
 
-    // check if the request is GET /api/user?id=x HTTP/1.1 
-    if(strncmp(m_url, "/api/user", 9) == 0 && m_method == GET){
-        return handle_get_user();
-    } else {
-        return BAD_REQUEST;
-    }
+    // check if the request is /api request
+    // GET /api/user?id=x HTTP/1.1 
+    if(strncmp(m_url, "/api/user", 9) == 0){
+        apireq = 1;
+        // GET method
+        if (m_method == GET){
+            api_ret = GET_RESOURCE;
+            return handle_get_user();
 
+        // POST method
+        } else if (m_method == POST){
+            api_ret = ADD_RESOURCE;
+            m_check_stat = CHECK_STATE_HEADER;
+            return NO_REQUEST;
+        }
+    }
     /**
      * http://192.168.110.129:10000/index.html
     */
@@ -328,9 +341,6 @@ http_conn::HTTP_CODE http_conn::handle_get_user(){
     // add_blank_line();
     // add_content(json_str.c_str());
     m_check_stat = CHECK_STATE_HEADER;
-    apireq = 1;
-    api_ret = GET_USER;
-
     return NO_REQUEST;
 }
 
@@ -372,9 +382,9 @@ http_conn::HTTP_CODE http_conn::parse_headers(char * text){
             return NO_REQUEST; // request incomplete, still need to parse the body
         }
         // parsed complete HTTP request
-        if (apireq){
-            return api_ret;
-        }
+        // if (apireq){
+        //     return api_ret;
+        // }
         return GET_REQUEST;
 
     } else if (strncasecmp( text, "Connection:", 11 ) == 0 ) {
@@ -411,14 +421,42 @@ http_conn::HTTP_CODE http_conn::parse_headers(char * text){
 // Didn't really parse the HTTP request body, only check if it's fully read
 http_conn::HTTP_CODE http_conn::parse_content(char * text){
     if (m_read_index >= (m_content_length + m_checked_index ) )
-    {
+    {   
+        // ensure string end
         text[ m_content_length ] = '\0';
-        if (apireq){
-            return api_ret;
+
+        // need to parse the content with POST method
+        if (m_method == POST){
+            handle_post(text);
+
+            /*========================
+            add the resource to the DB
+
+            ==========================
+            */
         }
+
         return GET_REQUEST;
     }
     return NO_REQUEST;
+}
+
+void http_conn::handle_post_content(char * text){
+    // extract body
+    std::string body(text);
+    // debug
+    std::cout << "Body: " << body << std::endl;
+    // next step: parse JSON
+    nlohmann::json j = nlohmann::json::parse(body);
+    std::string id = j["id"];
+    std::string user = j["name"];
+
+    // now we compose the response content and assign that to json_res
+    nlohmann::json res_msg;
+    res_msg["id"] = id;
+    res_msg["name"] = user; 
+    json_res = res_msg.dump();
+    return;
 }
 
 
@@ -458,9 +496,8 @@ http_conn::HTTP_CODE http_conn::process_read(){
                 ret = parse_headers(text);
                 if(ret == BAD_REQUEST){
                     return BAD_REQUEST;
-                } else if (apireq){
-                    return api_ret;
                 } else if (ret == GET_REQUEST){
+                    if (apireq) {return api_ret;}
                     return do_request();
                 } 
                 break;
@@ -469,10 +506,11 @@ http_conn::HTTP_CODE http_conn::process_read(){
             case CHECK_STATE_CONTENT:
             {
                 ret = parse_content(text);
-                if(apireq){
-                    return api_ret;
-                }
+                // if(apireq){
+                //     return api_ret;
+                // }
                 if (ret== GET_REQUEST){
+                    if(apireq){return api_ret;}
                     return do_request();
                 }
                 // 
@@ -552,90 +590,7 @@ void http_conn::unmap() {
 }
 
 
-// write HTTP response to the m_sockfd
-bool http_conn::write(){
-    int temp = 0;
-    int bytes_have_send = 0;  // bytes already sent
-    // int bytes_to_send = m_write_index; //bytes wait to be sent 
-    int bytes_to_send = m_iv[0].iov_len + m_iv[1].iov_len; //bytes wait to be sent 
-
-    if(bytes_to_send == 0) {
-        // bytes wait to be sent is 0, response terminates
-        // resset the socket as wait for read
-        modfd(m_epollfd, m_sockfd, EPOLLIN);
-        // reset everything related to this socket
-        init();
-        return true;
-    }
-
-    while(1) {
-        // wirte distributely
-        temp = writev(m_sockfd, m_iv, m_iv_count);
-        /* modify the m_iv[].iov_base & m_iv[1].iov_len
-        */
-
-        if (temp <= -1) {
-            // in this case, the socket buffer is full, writev() is non-blocking 
-            // and cannot progressing anymore.
-            // no need to modify the m_iv
-
-            // 如果TCP写缓冲没有空间，则等待下一轮EPOLLOUT事件，虽然在此期间，
-            // 服务器无法立即接收到同一客户的下一个请求，但可以保证连接的完整性。
-            if( errno == EAGAIN ) {
-                modfd(m_epollfd, m_sockfd, EPOLLOUT );
-                return true;
-            }
-            unmap();
-            return false;
-        }
-
-        // adjust iov
-        bytes_have_send = temp;
-
-        // case 1: header not fully sent
-        if (m_iv[0].iov_len > 0) {
-            if (bytes_have_send < (int)m_iv[0].iov_len){
-                m_iv[0].iov_base = static_cast<char*>(m_iv[0].iov_base) + bytes_have_send;
-                m_iv[0].iov_len -= bytes_have_send;
-                continue;
-            } else {
-                // header fully sent
-                bytes_have_send-= m_iv[0].iov_len;
-                m_iv[0].iov_base = NULL;
-                m_iv[0].iov_len = 0;
-            }
-
-        }
-
-        // case 2: file part
-        if (m_iv_count == 2 && bytes_have_send > 0){
-            m_iv[1].iov_base = (char*)m_iv[1].iov_base + bytes_have_send;
-            m_iv[1].iov_len -= bytes_have_send;
-        }
-
-        // recompute remaining bytes
-        bytes_to_send = m_iv[0].iov_len +(m_iv_count == 2 ? m_iv[1].iov_len : 0);
-
-        // bytes_to_send -= temp;
-        // bytes_have_send += temp;
-        if ( bytes_to_send <= 0 ) {
-            // 发送HTTP响应成功，根据HTTP请求中的Connection字段决定是否立即关闭连接
-            unmap();
-            if(m_linger) {
-                // reset the socket, wati another EPOLLIN event
-                init();
-                modfd( m_epollfd, m_sockfd, EPOLLIN );
-                return true;
-            } else {
-                modfd( m_epollfd, m_sockfd, EPOLLIN );
-                return false;
-            } 
-        }
-    }
-}
-
-
-// 往写缓冲中写入待发送的数据
+// write the data to be send in the write buffer
 bool http_conn::add_response( const char* format, ... ) {
     if( m_write_index >= WRITE_BUFFER_SIZE ) {
         return false;
@@ -762,12 +717,21 @@ bool http_conn::process_write(HTTP_CODE ret) {
             m_iv[ 1 ].iov_len = m_file_stat.st_size;
             m_iv_count = 2;
             return true;
-        case GET_USER:
+        case GET_RESOURCE:
             add_status_line(200, ok_200_title);
             add_headers(json_res.size(), "application/json");
             add_content(json_res.c_str());
             m_iv[0].iov_base = m_write_buf;
             m_iv[0].iov_len = m_write_index;
+            m_iv_count = 1;
+            return true;
+        case ADD_RESOURCE:
+            add_status_line(200, ok_200_title);
+            add_headers(json_res.size(), "application/json");
+            add_content(json_res.c_str());
+            // m_iv[0].iov_base = m_write_buf;
+            // m_iv[0].iov_len = m_write_index;
+            distribute_data();
             m_iv_count = 1;
             return true;
         default:
@@ -779,6 +743,92 @@ bool http_conn::process_write(HTTP_CODE ret) {
     m_iv_count = 1;
     return true;
 }
+
+
+// Again, this function is called in the MAIN THREAD, by the corresponding http_conn object
+// write HTTP response to the m_sockfd
+bool http_conn::write(){
+    int temp = 0;
+    int bytes_have_send = 0;  // bytes already sent
+    // int bytes_to_send = m_write_index; //bytes wait to be sent 
+    int bytes_to_send = m_iv[0].iov_len + m_iv[1].iov_len; //bytes wait to be sent 
+
+    if(bytes_to_send == 0) {
+        // bytes wait to be sent is 0, response terminates
+        // resset the socket as wait for read
+        modfd(m_epollfd, m_sockfd, EPOLLIN);
+        // reset everything related to this socket
+        init();
+        return true;
+    }
+
+    while(1) {
+        // wirte distributely
+        temp = writev(m_sockfd, m_iv, m_iv_count);
+        /* modify the m_iv[].iov_base & m_iv[1].iov_len
+        */
+
+        if (temp <= -1) {
+            // in this case, the socket buffer is full, writev() is non-blocking 
+            // and cannot progressing anymore.
+            // no need to modify the m_iv
+
+            // 如果TCP写缓冲没有空间，则等待下一轮EPOLLOUT事件，虽然在此期间，
+            // 服务器无法立即接收到同一客户的下一个请求，但可以保证连接的完整性。
+            if( errno == EAGAIN ) {
+                modfd(m_epollfd, m_sockfd, EPOLLOUT );
+                return true;
+            }
+            unmap();
+            return false;
+        }
+
+        // adjust iov
+        bytes_have_send = temp;
+
+        // case 1: header not fully sent
+        if (m_iv[0].iov_len > 0) {
+            if (bytes_have_send < (int)m_iv[0].iov_len){
+                m_iv[0].iov_base = static_cast<char*>(m_iv[0].iov_base) + bytes_have_send;
+                m_iv[0].iov_len -= bytes_have_send;
+                continue;
+            } else {
+                // header fully sent
+                bytes_have_send-= m_iv[0].iov_len;
+                m_iv[0].iov_base = NULL;
+                m_iv[0].iov_len = 0;
+            }
+
+        }
+
+        // case 2: file part
+        if (m_iv_count == 2 && bytes_have_send > 0){
+            m_iv[1].iov_base = (char*)m_iv[1].iov_base + bytes_have_send;
+            m_iv[1].iov_len -= bytes_have_send;
+        }
+
+        // recompute remaining bytes
+        bytes_to_send = m_iv[0].iov_len +(m_iv_count == 2 ? m_iv[1].iov_len : 0);
+
+        // bytes_to_send -= temp;
+        // bytes_have_send += temp;
+        if ( bytes_to_send <= 0 ) {
+            // 发送HTTP响应成功，根据HTTP请求中的Connection字段决定是否立即关闭连接
+            unmap();
+            if(m_linger) {
+                // reset the socket, wati another EPOLLIN event
+                init();
+                modfd( m_epollfd, m_sockfd, EPOLLIN );
+                return true;
+            } else {
+                modfd( m_epollfd, m_sockfd, EPOLLIN );
+                return false;
+            } 
+        }
+    }
+}
+
+
 
 // called by the threads in the threads poll
 // interface to process the request of HTTP

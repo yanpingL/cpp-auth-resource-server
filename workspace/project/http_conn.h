@@ -61,7 +61,7 @@ public:
     */
     enum HTTP_CODE { NO_REQUEST, GET_REQUEST, BAD_REQUEST, NO_RESOURCE, 
                     FORBIDDEN_REQUEST, FILE_REQUEST, INTERNAL_ERROR, CLOSED_CONNECTION,
-                    GET_USER};
+                    GET_RESOURCE, ADD_RESOURCE};
     
     // 3 possible states of state machine --> read state of line:
     // 1.read complete line 2.error in line 3.incomplete data of the line
@@ -90,15 +90,16 @@ private:
     LINE_STATUS parse_line(); // parse one line, check based on \r\n
 
     // ===== RESTful API =====
-    HTTP_CODE handle_api_request();
     HTTP_CODE handle_get_user();
     void parse_query(char* query_string, std::string& key, std::string& value);
     bool add_json_type();
 
+    void handle_post_content(char * text);
+
 
 
     bool process_write(HTTP_CODE ret); // create the HTTP response
-    // the following functions are called by the process_write to create the HTTP response
+    // the following functions are called by the process_write() to create the HTTP response
     void unmap();
     bool add_response( const char* format, ... );
     bool add_content( const char* content );
@@ -108,6 +109,10 @@ private:
     bool add_content_length( int content_length );
     bool add_linger();
     bool add_blank_line();
+    void distribute_data(){
+        m_iv[0].iov_base = m_write_buf;
+        m_iv[0].iov_len = m_write_index;
+    }
 
 
 
