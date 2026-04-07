@@ -247,7 +247,9 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char * text){
         m_method = POST;
     } else if (strcasecmp(method, "PUT") == 0){
         m_method = PUT;
-    }
+    } else if (strcasecmp(method, "DELETE") == 0){
+        m_method = DELETE;
+    } 
 
     // check the HTTP version: /index.html HTTP/1.1
     // if the m_version points to null, error
@@ -280,6 +282,11 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char * text){
             //PUT method
         } else if (m_method == PUT){
             api_ret = UPDATE_RESOURCE;
+
+            // DELETE method
+        } else if (m_method == DELETE){
+            api_ret = DELETE_RESOURCE;
+            handle_delete_user();
         }
     }
     /**
@@ -348,6 +355,33 @@ http_conn::HTTP_CODE http_conn::handle_get_user(){
     // add_content(json_str.c_str());
     m_check_stat = CHECK_STATE_HEADER;
     return NO_REQUEST;
+}
+
+/*
+DELETE /api/user?id=1 HTTP/1.1
+*/
+void http_conn::handle_delete_user(){
+    char* query = strchr(m_url, '?');
+    std::string key, value;
+
+    if (query){
+        *query++ = '\0';
+        parse_query(query, key, value);
+        // if(key == "id"){
+        //     id = value;
+        // }
+    }
+    /*
+    DB operation:
+    1. if user found, delete
+    2. if user not found, do nothing
+    
+    */
+
+    json res;
+    res["id"] = value;
+    json_res = "Delete User Id: " + res.dump();
+    return;
 }
 
 
@@ -497,7 +531,6 @@ void http_conn::handle_put_content(char* text){
     Now do the operation in the DB
     
     */
-
     json_res = body + std::to_string(count);
     return;
 }
@@ -778,6 +811,15 @@ bool http_conn::process_write(HTTP_CODE ret) {
             m_iv_count = 1;
             return true;
         case UPDATE_RESOURCE:
+            add_status_line(200, ok_200_title);
+            add_headers(json_res.size(), "application/json");
+            add_content(json_res.c_str());
+            // m_iv[0].iov_base = m_write_buf;
+            // m_iv[0].iov_len = m_write_index;
+            distribute_data();
+            m_iv_count = 1;
+            return true;
+        case DELETE_RESOURCE:
             add_status_line(200, ok_200_title);
             add_headers(json_res.size(), "application/json");
             add_content(json_res.c_str());
