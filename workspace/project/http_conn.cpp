@@ -245,6 +245,8 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char * text){
         m_method = GET;
     } else if (strcasecmp(method, "POST") == 0){
         m_method = POST;
+    } else if (strcasecmp(method, "PUT") == 0){
+        m_method = PUT;
     }
 
     // check the HTTP version: /index.html HTTP/1.1
@@ -269,11 +271,15 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char * text){
             api_ret = GET_RESOURCE;
             return handle_get_user();
 
-        // POST method
+            // POST method
         } else if (m_method == POST){
             api_ret = ADD_RESOURCE;
             m_check_stat = CHECK_STATE_HEADER;
             return NO_REQUEST;
+
+            //PUT method
+        } else if (m_method == PUT){
+            api_ret = UPDATE_RESOURCE;
         }
     }
     /**
@@ -434,6 +440,18 @@ http_conn::HTTP_CODE http_conn::parse_content(char * text){
 
             ==========================
             */
+
+        } else if (m_method == PUT){
+            // only parse the full body content
+            handle_put_content(text);
+            /*========================
+            update the resource to the DB
+            if the resource not in the DB
+            add it to the DB
+
+            ==========================
+            */
+
         }
 
         return GET_REQUEST;
@@ -457,6 +475,30 @@ void http_conn::handle_post_content(char * text){
     res_msg["id"] = id;
     res_msg["name"] = user; 
     json_res = res_msg.dump();
+    return;
+}
+
+
+void http_conn::handle_put_content(char* text){
+    // debug
+    std::string body(text);
+    std::cout << "Body: " << body << std::endl;
+
+    json j = json::parse(body);
+    int count = 0;
+
+    for (auto it = j.begin(); it != j.end();++it){
+        std::string key = it.key();
+        std::string value = it.value();
+        count++;
+        std::cout << key << " : " << value << std::endl;
+    }
+    /*
+    Now do the operation in the DB
+    
+    */
+
+    json_res = body + std::to_string(count);
     return;
 }
 
@@ -727,6 +769,15 @@ bool http_conn::process_write(HTTP_CODE ret) {
             m_iv_count = 1;
             return true;
         case ADD_RESOURCE:
+            add_status_line(200, ok_200_title);
+            add_headers(json_res.size(), "application/json");
+            add_content(json_res.c_str());
+            // m_iv[0].iov_base = m_write_buf;
+            // m_iv[0].iov_len = m_write_index;
+            distribute_data();
+            m_iv_count = 1;
+            return true;
+        case UPDATE_RESOURCE:
             add_status_line(200, ok_200_title);
             add_headers(json_res.size(), "application/json");
             add_content(json_res.c_str());

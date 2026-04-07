@@ -62,7 +62,7 @@ public:
     */
     enum HTTP_CODE { NO_REQUEST, GET_REQUEST, BAD_REQUEST, NO_RESOURCE, 
                     FORBIDDEN_REQUEST, FILE_REQUEST, INTERNAL_ERROR, CLOSED_CONNECTION,
-                    GET_RESOURCE, ADD_RESOURCE};
+                    GET_RESOURCE, ADD_RESOURCE, UPDATE_RESOURCE};
     
     // 3 possible states of state machine --> read state of line:
     // 1.read complete line 2.error in line 3.incomplete data of the line
@@ -95,7 +95,10 @@ private:
     void parse_query(char* query_string, std::string& key, std::string& value);
     bool add_json_type();
 
+    // helper function for POST method
     void handle_post_content(char * text);
+    // helper function for PUT metho
+    void handle_put_content(char * text);
 
 
 
