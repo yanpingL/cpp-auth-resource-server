@@ -1,12 +1,14 @@
 services:
-  web-dev:
-    image: webserver-web-dev:latest
+  web-dev: #service name
+    image: webserver-web-dev:latest #blueprint of the env
     build:
       context: .
       network: host   # IMPORTANT: avoids DNS/VPN build issues
-    container_name: sys-web-dev
+    container_name: sys-web-dev #instance of the image 
     volumes:
       - ./workspace:/workspace
+    depends_on:
+      - mysql   # wait for mysql to launch
     ports:
       - "8080:8080"
     dns:
@@ -14,8 +16,24 @@ services:
       - 1.1.1.1
     stdin_open: true
     tty: true
-
     cap_add:
       - SYS_PTRACE
     security_opt:
       - seccomp=unconfined
+  
+  mysql: #  Newly added database service
+    image: mysql:8.0
+    container_name: sys-mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root123
+      MYSQL_DATABASE: webdb
+      MYSQL_USER: webuser
+      MYSQL_PASSWORD: webpass123
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+volumes:
+  mysql_data:
