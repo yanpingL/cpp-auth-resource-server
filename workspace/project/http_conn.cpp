@@ -334,18 +334,54 @@ http_conn::HTTP_CODE http_conn::handle_get_user(){
         std::string key, value;
         parse_query(query, key, value);
 
-        if(key == "id"){
+        if(key == "id")
             id = value;
-        }
     }
+
+    // server connect to DB
+    MYSQL* conn = mysql_init(NULL);
+
+    conn = mysql_real_connect(
+        conn,
+        "sys-mysql",
+        "root",
+        "root",
+        "webdb",
+        3306,
+        NULL,
+        0  
+    );
+
+    // if(!conn){
+    //     json_res = "{\"error\":\"db connect failed\"}";
+    //     return GET_RESOURCE;
+    // }
+
+    // build SQL
+    std::string sql = "SELECT id, name, email FROM users WHERE id =" + id;
+
+    /*
+    Need update
+    */
+    if(mysql_query(conn, sql.c_str())){
+        json_res = "{\"error\":\"query failed\"}";
+        return GET_RESOURCE;
+    }
+
+    MYSQL_RES* result = mysql_store_result(conn);
+    MYSQL_ROW row = mysql_fetch_row(result);
 
     // build JSON
     json res;
-    res["id"] = id;
-    res["name"] = "test_user";
+    if (row){
+        res["id"] = row[0];
+        res["name"] = row[1];
+        res["email"] = row[2];
+    } else {
+        res["error"] = "user not found";
+    }
 
     json_res = res.dump();
-
     // // build HTTP respons
     // add_status_line(200, ok_200_title);
     // add_content_length(json_str.size());

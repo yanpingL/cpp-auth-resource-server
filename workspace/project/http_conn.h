@@ -23,6 +23,8 @@
 #include <iostream>
 #include <string>
 #include <nlohmann/json.hpp>
+#include <mysql/mysql.h>
+
 using json = nlohmann::json;
 
 class http_conn {
