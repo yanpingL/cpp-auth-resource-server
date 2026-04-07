@@ -295,6 +295,7 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char * text){
     return NO_REQUEST;
 }
 
+
 //Implement GET/api/user (USING nlohmann/json)
 //GET/api/user?id=123 HTTP/1.1
 
@@ -325,9 +326,8 @@ http_conn::HTTP_CODE http_conn::handle_get_user(){
         }
     }
 
-
     // build JSON
-    nlohmann::json res;
+    json res;
     res["id"] = id;
     res["name"] = "test_user";
 
@@ -427,7 +427,7 @@ http_conn::HTTP_CODE http_conn::parse_content(char * text){
 
         // need to parse the content with POST method
         if (m_method == POST){
-            handle_post(text);
+            handle_post_content(text);
 
             /*========================
             add the resource to the DB
@@ -441,18 +441,19 @@ http_conn::HTTP_CODE http_conn::parse_content(char * text){
     return NO_REQUEST;
 }
 
+
 void http_conn::handle_post_content(char * text){
     // extract body
     std::string body(text);
     // debug
     std::cout << "Body: " << body << std::endl;
     // next step: parse JSON
-    nlohmann::json j = nlohmann::json::parse(body);
+    json j = json::parse(body);
     std::string id = j["id"];
     std::string user = j["name"];
 
     // now we compose the response content and assign that to json_res
-    nlohmann::json res_msg;
+    json res_msg;
     res_msg["id"] = id;
     res_msg["name"] = user; 
     json_res = res_msg.dump();
@@ -509,7 +510,7 @@ http_conn::HTTP_CODE http_conn::process_read(){
                 // if(apireq){
                 //     return api_ret;
                 // }
-                if (ret== GET_REQUEST){
+                if (ret == GET_REQUEST){
                     if(apireq){return api_ret;}
                     return do_request();
                 }

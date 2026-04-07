@@ -23,6 +23,7 @@
 #include <iostream>
 #include <string>
 #include <nlohmann/json.hpp>
+using json = nlohmann::json;
 
 class http_conn {
 public:
