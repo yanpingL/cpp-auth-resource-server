@@ -321,6 +321,7 @@ void http_conn::parse_query(char* query_string, std::string& key, std::string& v
     }
 }
 
+
 // need to complete the last half of the parse_request_line
 http_conn::HTTP_CODE http_conn::handle_get_user(){
     //parse query 
@@ -531,7 +532,7 @@ http_conn::HTTP_CODE http_conn::parse_content(char * text){
 
         } else if (m_method == PUT){
             // only parse the full body content
-            handle_put_content(text);
+            return handle_put_content(text);
             /*========================
             update the resource to the DB
             if the resource not in the DB
@@ -628,26 +629,89 @@ http_conn::HTTP_CODE http_conn::handle_post_content(char * text){
 }
 
 
-void http_conn::handle_put_content(char* text){
+// PUT METHOD
+http_conn::HTTP_CODE http_conn::handle_put_content(char* text){
     // debug
     std::string body(text);
-    std::cout << "Body: " << body << std::endl;
+    std::cout << "PUT Body: " << body << std::endl;
 
     json j = json::parse(body);
-    int count = 0;
+
+    // 1. validate id
+    if (!j.contains("id") || !j["id"].is_number_integer()){
+        json_res = "{\"error\":\"invalid id\"}";
+        api_ret = BAD_REQUEST;
+        return BAD_REQUEST;
+    }
+    int id = j["id"];
+
+
+    // 2. build SET clause
+    std::string set_clause;
+    // add the user resource back to db
+    std::set<std::string> allowed = {"name", "email", "password"};
 
     for (auto it = j.begin(); it != j.end();++it){
         std::string key = it.key();
-        std::string value = it.value();
-        count++;
-        std::cout << key << " : " << value << std::endl;
+
+        if(key == "id" || !allowed.count(key)) continue;
+
+        if (it.value().is_number()){
+            set_clause += key + "=" + it.value().dump() + ",";
+        } else if (it.value().is_string()){
+            std::string val = it.value();
+            set_clause += key + "='" + val + "',";
+        }
     }
-    /*
-    Now do the operation in the DB
-    
-    */
-    json_res = body + std::to_string(count);
-    return;
+
+    if(set_clause.empty()){
+        json_res = "{\"error\":\"no fields to update\"}";
+        api_ret = BAD_REQUEST;
+        return BAD_REQUEST;
+    }
+
+    set_clause.pop_back(); // remove last comma
+
+    // 3. connect DB
+    MYSQL* conn = mysql_init(NULL);
+    conn = mysql_real_connect(conn,
+        "sys-mysql",
+        "webuser",
+        "webpass123",
+        "webdb",
+        3306,
+        NULL,
+        0);
+
+    if (!conn){
+            json_res = "{\"error\":\"db connect failed\"}";
+            api_ret = BAD_REQUEST;
+            return BAD_REQUEST;
+    }
+
+    // 4. build SQL
+    std::string sql = std::string("UPDATE users SET ") 
+                        + set_clause + " WHERE id=" + std::to_string(id);
+
+    // 5. execute
+    if (mysql_query(conn, sql.c_str())){
+        json_res = "{\"error\":\"update failed\"}";
+        mysql_close(conn);
+        api_ret = BAD_REQUEST;
+        return BAD_REQUEST;
+    }
+
+    // 6. check affected rows
+    if (mysql_affected_rows(conn) == 0){
+        json_res = "{\"error\":\"user not found\"}";
+        mysql_close(conn);
+        api_ret = BAD_REQUEST;
+        return BAD_REQUEST;
+    } else {
+        json_res = "{\"status\":\"updated\"}";
+        mysql_close(conn);
+        return GET_REQUEST;
+    }
 }
 
 

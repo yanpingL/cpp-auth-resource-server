@@ -101,7 +101,7 @@ private:
     // helper function for POST method
     HTTP_CODE handle_post_content(char * text);
     // helper function for PUT method
-    void handle_put_content(char * text);
+    HTTP_CODE handle_put_content(char * text);
     // helper fuction for DELETE method
     void handle_delete_user();
 
