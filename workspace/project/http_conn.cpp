@@ -286,7 +286,9 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char * text){
             // DELETE method
         } else if (m_method == DELETE){
             api_ret = DELETE_RESOURCE;
-            handle_delete_user();
+            m_check_stat = CHECK_STATE_HEADER;
+            return NO_REQUEST;
+            
         }
     }
     /**
@@ -421,7 +423,7 @@ http_conn::HTTP_CODE http_conn::handle_get_user(){
 /*
 DELETE /api/user?id=1 HTTP/1.1
 */
-void http_conn::handle_delete_user(){
+http_conn::HTTP_CODE http_conn::handle_delete_user(){
     char* query = strchr(m_url, '?');
     std::string key, value;
 
@@ -432,17 +434,52 @@ void http_conn::handle_delete_user(){
         //     id = value;
         // }
     }
-    /*
-    DB operation:
-    1. if user found, delete
-    2. if user not found, do nothing
-    
-    */
 
-    json res;
-    res["id"] = value;
-    json_res = "Delete User Id: " + res.dump();
-    return;
+    // validate id
+    if (key != "id" || !std::all_of(value.begin(), value.end(), ::isdigit)){
+        json_res = "{\"error\":\"invalid id\"}";
+        api_ret = BAD_REQUEST;
+        return BAD_REQUEST;
+    }
+
+    // connect DB
+    MYSQL* conn = mysql_init(NULL);
+    conn = mysql_real_connect(conn,
+                "sys-mysql",
+                "webuser",
+                "webpass123",
+                "webdb",
+                3306,
+                NULL,
+                0);
+
+    if (!conn){
+        json_res = "{\"error\":\"db connect failed\"}";
+        api_ret = BAD_REQUEST;
+        return BAD_REQUEST;
+    }
+
+    std::string sql = "DELETE FROM users WHERE id=" + value;
+
+    // execute
+    if (mysql_query(conn, sql.c_str())){
+        json_res = "{\"error\":\"delete failed\"}";
+        mysql_close(conn);
+        api_ret = BAD_REQUEST;
+        return BAD_REQUEST;
+    }
+
+    // check result
+    if (mysql_affected_rows(conn) == 0){
+        json_res = "{\"error\":\"user not found\"}";
+        mysql_close(conn);
+        api_ret = BAD_REQUEST;
+        return BAD_REQUEST;
+    } else {
+        json_res = "{\"status\":\"deleted\"}";
+        return GET_REQUEST;
+    }
+
 }
 
 
@@ -481,6 +518,11 @@ http_conn::HTTP_CODE http_conn::parse_headers(char * text){
         if (m_content_length != 0 ) {
             m_check_stat = CHECK_STATE_CONTENT;
             return NO_REQUEST; // request incomplete, still need to parse the body
+        }
+        // DELETE /api/user?id=... usually has no body.
+        // Execute handler once headers are fully parsed.
+        if (apireq && m_method == DELETE) {
+            return handle_delete_user();
         }
         // parsed complete HTTP request
         // if (apireq){
@@ -529,19 +571,10 @@ http_conn::HTTP_CODE http_conn::parse_content(char * text){
         // need to parse the content with POST method
         if (m_method == POST){
             return handle_post_content(text);
-
         } else if (m_method == PUT){
             // only parse the full body content
             return handle_put_content(text);
-            /*========================
-            update the resource to the DB
-            if the resource not in the DB
-            add it to the DB
-
-            ==========================
-            */
-
-        }
+        } 
 
         return GET_REQUEST;
     }
@@ -943,10 +976,17 @@ bool http_conn::process_write(HTTP_CODE ret) {
             }
             break;
         case BAD_REQUEST:
-            add_status_line( 400, error_400_title );
-            add_headers( strlen( error_400_form ), "text"  );
-            if ( ! add_content( error_400_form ) ) {
-                return false;
+            add_status_line(400, error_400_title);
+            if (apireq && !json_res.empty()) {
+                add_headers(json_res.size(), "application/json");
+                if (!add_content(json_res.c_str())) {
+                    return false;
+                }
+            } else {
+                add_headers(strlen(error_400_form), "text");
+                if (!add_content(error_400_form)) {
+                    return false;
+                }
             }
             break;
         case NO_RESOURCE:

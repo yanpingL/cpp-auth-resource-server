@@ -103,7 +103,7 @@ private:
     // helper function for PUT method
     HTTP_CODE handle_put_content(char * text);
     // helper fuction for DELETE method
-    void handle_delete_user();
+    HTTP_CODE handle_delete_user();
 
 
 
