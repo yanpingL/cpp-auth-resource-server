@@ -311,7 +311,6 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char * text){
 
 //Implement GET/api/user (USING nlohmann/json)
 //GET/api/user?id=123 HTTP/1.1
-
 // helper function used in handle_get_user()
 void http_conn::parse_query(char* query_string, std::string& key, std::string& value) {
     char* equal = strchr(query_string, '=');
@@ -343,19 +342,20 @@ http_conn::HTTP_CODE http_conn::handle_get_user(){
 
     conn = mysql_real_connect(
         conn,
-        "sys-mysql",
-        "root",
-        "root",
-        "webdb",
+        "sys-mysql",  // service name
+        "webuser",  // frmo compose
+        "webpass123", // from compose
+        "webdb",   // DB name
         3306,
         NULL,
         0  
     );
 
-    // if(!conn){
-    //     json_res = "{\"error\":\"db connect failed\"}";
-    //     return GET_RESOURCE;
-    // }
+    if(!conn){
+        json_res = "{\"error\":\"db connect failed\"}";
+        api_ret = BAD_REQUEST;
+        return BAD_REQUEST;
+    }
 
     // build SQL
     std::string sql = "SELECT id, name, email FROM users WHERE id =" + id;
@@ -365,7 +365,8 @@ http_conn::HTTP_CODE http_conn::handle_get_user(){
     */
     if(mysql_query(conn, sql.c_str())){
         json_res = "{\"error\":\"query failed\"}";
-        return GET_RESOURCE;
+        api_ret = BAD_REQUEST;
+        return BAD_REQUEST;
     }
 
     MYSQL_RES* result = mysql_store_result(conn);
@@ -382,6 +383,8 @@ http_conn::HTTP_CODE http_conn::handle_get_user(){
     }
 
     json_res = res.dump();
+    mysql_free_result(result);
+    mysql_close(conn);
     // // build HTTP respons
     // add_status_line(200, ok_200_title);
     // add_content_length(json_str.size());

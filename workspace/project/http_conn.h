@@ -25,7 +25,7 @@
 #include <nlohmann/json.hpp>
 #include <mysql/mysql.h>
 
-using json = nlohmann::json;
+using json = nlohmann::ordered_json;
 
 class http_conn {
 public:
