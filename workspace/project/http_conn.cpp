@@ -333,8 +333,13 @@ http_conn::HTTP_CODE http_conn::handle_get_user(){
         std::string key, value;
         parse_query(query, key, value);
 
-        if(key == "id")
+        if (key != "id") {
+            json_res = "{\"error\":\"invalid param\"}";
+            api_ret = BAD_REQUEST;
+            return BAD_REQUEST;
+        } else {
             id = value;
+        }
     }
 
     // server connect to DB
@@ -352,24 +357,46 @@ http_conn::HTTP_CODE http_conn::handle_get_user(){
     );
 
     if(!conn){
+        std::cout << "DB error: " << mysql_error(conn) << std::endl;
         json_res = "{\"error\":\"db connect failed\"}";
         api_ret = BAD_REQUEST;
         return BAD_REQUEST;
     }
 
-    // build SQL
-    std::string sql = "SELECT id, name, email FROM users WHERE id =" + id;
-
-    /*
-    Need update
-    */
-    if(mysql_query(conn, sql.c_str())){
-        json_res = "{\"error\":\"query failed\"}";
+    // validate
+    if (!std::all_of(id.begin(), id.end(), ::isdigit)) {
+        json_res = "{\"error\":\"invalid id\"}";
+        mysql_close(conn);
         api_ret = BAD_REQUEST;
         return BAD_REQUEST;
     }
 
+    // escape
+    std::string safe;
+    safe.resize(id.length() * 2 + 1);
+    mysql_real_escape_string(conn, safe.data(), id.c_str(), id.length());
+
+    // build SQL
+    std::string sql =
+    "SELECT id, name, email FROM users WHERE id=" + std::string(safe.data());
+
+    // query
+    if (mysql_query(conn, sql.c_str())) {
+        json_res = "{\"error\":\"query failed\"}";
+        mysql_close(conn);
+        api_ret = BAD_REQUEST;
+        return BAD_REQUEST;
+    }
+
+    // result
     MYSQL_RES* result = mysql_store_result(conn);
+    if (!result) {
+        json_res = "{\"error\":\"query failed\"}";
+        mysql_free_result(result);
+        mysql_close(conn);
+        api_ret = BAD_REQUEST;
+        return BAD_REQUEST;
+    }
     MYSQL_ROW row = mysql_fetch_row(result);
 
     // build JSON
