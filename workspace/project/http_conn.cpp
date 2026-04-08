@@ -527,13 +527,7 @@ http_conn::HTTP_CODE http_conn::parse_content(char * text){
 
         // need to parse the content with POST method
         if (m_method == POST){
-            handle_post_content(text);
-
-            /*========================
-            add the resource to the DB
-
-            ==========================
-            */
+            return handle_post_content(text);
 
         } else if (m_method == PUT){
             // only parse the full body content
@@ -554,22 +548,83 @@ http_conn::HTTP_CODE http_conn::parse_content(char * text){
 }
 
 
-void http_conn::handle_post_content(char * text){
+/*
+1. Still need to handlle when the post resource already exist
+2. 
+*/
+http_conn::HTTP_CODE http_conn::handle_post_content(char * text){
+    
     // extract body
     std::string body(text);
     // debug
     std::cout << "Body: " << body << std::endl;
     // next step: parse JSON
     json j = json::parse(body);
-    std::string id = j["id"];
-    std::string user = j["name"];
 
-    // now we compose the response content and assign that to json_res
-    json res_msg;
-    res_msg["id"] = id;
-    res_msg["name"] = user; 
-    json_res = res_msg.dump();
-    return;
+    // validate id
+    if (!j.contains("id") || !j["id"].is_number_integer()){
+        json_res = "{\"error\":\"invalid id\"}";
+        api_ret = BAD_REQUEST;
+        return BAD_REQUEST;
+    }
+    int id = j["id"];
+    
+    // add the user resource back to db
+    std::set<std::string> allowed = {"id", "name", "email", "password"};
+    std::string cols;
+    std::string values;
+
+    for (auto it = j.begin(); it != j.end(); ++it){
+        std::string key = it.key();
+
+        // whitelist
+        if(!allowed.count(key)) continue;
+
+        cols += key + ",";
+
+        // number 
+        if(it.value().is_number()){
+            values += it.value().dump() + ",";
+        } else if (it.value().is_string()){
+            std::string val = it.value();
+            values += "'" + val + "',";
+        }
+    }
+
+    if(!cols.empty()) cols.pop_back();
+    if(!values.empty()) values.pop_back();
+
+    std::string sql =  std::string("INSERT INTO users ") + "(" + cols + ") values ("
+            + values + ")";
+
+    // connect to DB
+    MYSQL* conn = mysql_init(NULL);
+    conn = mysql_real_connect(conn,
+                    "sys-mysql", 
+                    "webuser", 
+                    "webpass123", 
+                    "webdb", 
+                    3306, 
+                    NULL, 
+                    0);
+
+    if (!conn){
+        json_res = "{\"error\":\"db connect failed\"}";
+        mysql_close(conn);
+        api_ret = BAD_REQUEST;
+        return BAD_REQUEST;
+    }
+    
+    if(mysql_query(conn, sql.c_str())){
+        json_res = "{\"error\":\"insert failed\"}";
+        mysql_close(conn);
+        api_ret = BAD_REQUEST;
+        return BAD_REQUEST;
+    } else {
+        json_res = "{\"status\":\"created\"}";
+        mysql_close(conn);
+        return GET_REQUEST;
+    }
 }
 
 
@@ -649,6 +704,7 @@ http_conn::HTTP_CODE http_conn::process_read(){
                     if(apireq){return api_ret;}
                     return do_request();
                 }
+                return ret;
                 // 
                 line_status = LINE_OPEN;
                 break;

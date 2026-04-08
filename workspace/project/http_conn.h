@@ -24,6 +24,7 @@
 #include <string>
 #include <nlohmann/json.hpp>
 #include <mysql/mysql.h>
+#include <set>
 
 using json = nlohmann::ordered_json;
 
@@ -98,7 +99,7 @@ private:
     bool add_json_type();
 
     // helper function for POST method
-    void handle_post_content(char * text);
+    HTTP_CODE handle_post_content(char * text);
     // helper function for PUT method
     void handle_put_content(char * text);
     // helper fuction for DELETE method
