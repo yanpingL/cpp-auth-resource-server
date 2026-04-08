@@ -412,16 +412,10 @@ http_conn::HTTP_CODE http_conn::handle_get_user(){
     json_res = res.dump();
     mysql_free_result(result);
     mysql_close(conn);
-    // // build HTTP respons
-    // add_status_line(200, ok_200_title);
-    // add_content_length(json_str.size());
-    // add_json_type();
-    // add_linger();
-    // add_blank_line();
-    // add_content(json_str.c_str());
     m_check_stat = CHECK_STATE_HEADER;
     return NO_REQUEST;
 }
+
 
 /*
 DELETE /api/user?id=1 HTTP/1.1
