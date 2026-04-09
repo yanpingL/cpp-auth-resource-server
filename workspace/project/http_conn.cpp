@@ -109,8 +109,6 @@ void http_conn::init(int sockfd, const sockaddr_in &addr){
     // add to epoll instance
     addfd(m_epollfd, m_sockfd, 1);
 
-    // total user number + 1
-    m_user_count++;
     init();
 } 
 
@@ -131,7 +129,7 @@ void http_conn::init(){
 
     json_res = "";
     apireq = 0;
-    api_ret = NO_REQUEST;
+    // api_ret = NO_REQUEST;
 
     memset(m_read_buf, 0, READ_BUFFER_SIZE);
     memset(m_write_buf, 0, READ_BUFFER_SIZE);
@@ -269,35 +267,29 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char * text){
     if(strncmp(m_url, "/api/user", 9) == 0){
         apireq = 1;
         // GET method
-        if (m_method == GET){
-            api_ret = GET_RESOURCE;
-            return handle_get_user();
+        // if (m_method == GET){
+        //     api_ret = GET_RESOURCE;
 
-            // POST method
-        } else if (m_method == POST){
-            api_ret = ADD_RESOURCE;
-            m_check_stat = CHECK_STATE_HEADER;
-            return NO_REQUEST;
+        //     // POST method
+        // } else if (m_method == POST){
+        //     api_ret = ADD_RESOURCE;
 
-            //PUT method
-        } else if (m_method == PUT){
-            api_ret = UPDATE_RESOURCE;
+        //     //PUT method
+        // } else if (m_method == PUT){
+        //     api_ret = UPDATE_RESOURCE;
 
-            // DELETE method
-        } else if (m_method == DELETE){
-            api_ret = DELETE_RESOURCE;
-            m_check_stat = CHECK_STATE_HEADER;
-            return NO_REQUEST;
-            
-        }
+        //     // DELETE method
+        // } else if (m_method == DELETE){
+        //     api_ret = DELETE_RESOURCE;
+        // }
     }
+
     /**
      * http://192.168.110.129:10000/index.html
     */
-
+    // non-api request, file request
     if (strncasecmp(m_url, "http://", 7) == 0 ){
         m_url += 7;
-
         m_url = strchr(m_url, '/'); // index.html
     }
 
@@ -338,7 +330,6 @@ http_conn::HTTP_CODE http_conn::handle_get_user(){
 
         if (key != "id") {
             json_res = "{\"error\":\"invalid param\"}";
-            api_ret = BAD_REQUEST;
             return BAD_REQUEST;
         } else {
             id = value;
@@ -347,7 +338,6 @@ http_conn::HTTP_CODE http_conn::handle_get_user(){
 
     // server connect to DB
     MYSQL* conn = mysql_init(NULL);
-
     conn = mysql_real_connect(
         conn,
         "sys-mysql",  // service name
@@ -362,7 +352,6 @@ http_conn::HTTP_CODE http_conn::handle_get_user(){
     if(!conn){
         std::cout << "DB error: " << mysql_error(conn) << std::endl;
         json_res = "{\"error\":\"db connect failed\"}";
-        api_ret = BAD_REQUEST;
         return BAD_REQUEST;
     }
 
@@ -370,7 +359,6 @@ http_conn::HTTP_CODE http_conn::handle_get_user(){
     if (!std::all_of(id.begin(), id.end(), ::isdigit)) {
         json_res = "{\"error\":\"invalid id\"}";
         mysql_close(conn);
-        api_ret = BAD_REQUEST;
         return BAD_REQUEST;
     }
 
@@ -387,7 +375,6 @@ http_conn::HTTP_CODE http_conn::handle_get_user(){
     if (mysql_query(conn, sql.c_str())) {
         json_res = "{\"error\":\"query failed\"}";
         mysql_close(conn);
-        api_ret = BAD_REQUEST;
         return BAD_REQUEST;
     }
 
@@ -397,7 +384,6 @@ http_conn::HTTP_CODE http_conn::handle_get_user(){
         json_res = "{\"error\":\"query failed\"}";
         mysql_free_result(result);
         mysql_close(conn);
-        api_ret = BAD_REQUEST;
         return BAD_REQUEST;
     }
     MYSQL_ROW row = mysql_fetch_row(result);
@@ -415,8 +401,7 @@ http_conn::HTTP_CODE http_conn::handle_get_user(){
     json_res = res.dump();
     mysql_free_result(result);
     mysql_close(conn);
-    m_check_stat = CHECK_STATE_HEADER;
-    return NO_REQUEST;
+    return GET_RESOURCE;
 }
 
 
@@ -430,15 +415,11 @@ http_conn::HTTP_CODE http_conn::handle_delete_user(){
     if (query){
         *query++ = '\0';
         parse_query(query, key, value);
-        // if(key == "id"){
-        //     id = value;
-        // }
     }
 
     // validate id
     if (key != "id" || !std::all_of(value.begin(), value.end(), ::isdigit)){
         json_res = "{\"error\":\"invalid id\"}";
-        api_ret = BAD_REQUEST;
         return BAD_REQUEST;
     }
 
@@ -455,7 +436,6 @@ http_conn::HTTP_CODE http_conn::handle_delete_user(){
 
     if (!conn){
         json_res = "{\"error\":\"db connect failed\"}";
-        api_ret = BAD_REQUEST;
         return BAD_REQUEST;
     }
 
@@ -465,7 +445,6 @@ http_conn::HTTP_CODE http_conn::handle_delete_user(){
     if (mysql_query(conn, sql.c_str())){
         json_res = "{\"error\":\"delete failed\"}";
         mysql_close(conn);
-        api_ret = BAD_REQUEST;
         return BAD_REQUEST;
     }
 
@@ -473,11 +452,10 @@ http_conn::HTTP_CODE http_conn::handle_delete_user(){
     if (mysql_affected_rows(conn) == 0){
         json_res = "{\"error\":\"user not found\"}";
         mysql_close(conn);
-        api_ret = BAD_REQUEST;
         return BAD_REQUEST;
     } else {
         json_res = "{\"status\":\"deleted\"}";
-        return GET_REQUEST;
+        return DELETE_RESOURCE;
     }
 
 }
@@ -515,19 +493,23 @@ http_conn::HTTP_CODE http_conn::parse_headers(char * text){
     if(text[0] == '\0') {
         // if HTTP request has body, need to read m_content_length bytes body
         // state machine change to CHECK_STATE_CONTENT
+
+        // DELETE /api/user?id=... usually has no body.
+        // Execute handler once headers are fully parsed.
+        if (apireq){
+            if (m_method == DELETE){
+                return handle_delete_user();
+            } else if(m_method == GET){
+                return handle_get_user();
+            } 
+        }
+        
         if (m_content_length != 0 ) {
             m_check_stat = CHECK_STATE_CONTENT;
             return NO_REQUEST; // request incomplete, still need to parse the body
         }
-        // DELETE /api/user?id=... usually has no body.
-        // Execute handler once headers are fully parsed.
-        if (apireq && m_method == DELETE) {
-            return handle_delete_user();
-        }
-        // parsed complete HTTP request
-        // if (apireq){
-        //     return api_ret;
-        // }
+        
+        // file request
         return GET_REQUEST;
 
     } else if (strncasecmp( text, "Connection:", 11 ) == 0 ) {
@@ -575,7 +557,6 @@ http_conn::HTTP_CODE http_conn::parse_content(char * text){
             // only parse the full body content
             return handle_put_content(text);
         } 
-
         return GET_REQUEST;
     }
     return NO_REQUEST;
@@ -598,7 +579,6 @@ http_conn::HTTP_CODE http_conn::handle_post_content(char * text){
     // validate id
     if (!j.contains("id") || !j["id"].is_number_integer()){
         json_res = "{\"error\":\"invalid id\"}";
-        api_ret = BAD_REQUEST;
         return BAD_REQUEST;
     }
     int id = j["id"];
@@ -645,19 +625,17 @@ http_conn::HTTP_CODE http_conn::handle_post_content(char * text){
     if (!conn){
         json_res = "{\"error\":\"db connect failed\"}";
         mysql_close(conn);
-        api_ret = BAD_REQUEST;
         return BAD_REQUEST;
     }
     
     if(mysql_query(conn, sql.c_str())){
         json_res = "{\"error\":\"insert failed\"}";
         mysql_close(conn);
-        api_ret = BAD_REQUEST;
         return BAD_REQUEST;
     } else {
         json_res = "{\"status\":\"created\"}";
         mysql_close(conn);
-        return GET_REQUEST;
+        return ADD_RESOURCE;
     }
 }
 
@@ -673,7 +651,6 @@ http_conn::HTTP_CODE http_conn::handle_put_content(char* text){
     // 1. validate id
     if (!j.contains("id") || !j["id"].is_number_integer()){
         json_res = "{\"error\":\"invalid id\"}";
-        api_ret = BAD_REQUEST;
         return BAD_REQUEST;
     }
     int id = j["id"];
@@ -699,7 +676,6 @@ http_conn::HTTP_CODE http_conn::handle_put_content(char* text){
 
     if(set_clause.empty()){
         json_res = "{\"error\":\"no fields to update\"}";
-        api_ret = BAD_REQUEST;
         return BAD_REQUEST;
     }
 
@@ -718,7 +694,6 @@ http_conn::HTTP_CODE http_conn::handle_put_content(char* text){
 
     if (!conn){
             json_res = "{\"error\":\"db connect failed\"}";
-            api_ret = BAD_REQUEST;
             return BAD_REQUEST;
     }
 
@@ -730,7 +705,6 @@ http_conn::HTTP_CODE http_conn::handle_put_content(char* text){
     if (mysql_query(conn, sql.c_str())){
         json_res = "{\"error\":\"update failed\"}";
         mysql_close(conn);
-        api_ret = BAD_REQUEST;
         return BAD_REQUEST;
     }
 
@@ -738,16 +712,13 @@ http_conn::HTTP_CODE http_conn::handle_put_content(char* text){
     if (mysql_affected_rows(conn) == 0){
         json_res = "{\"error\":\"user not found\"}";
         mysql_close(conn);
-        api_ret = BAD_REQUEST;
         return BAD_REQUEST;
     } else {
         json_res = "{\"status\":\"updated\"}";
         mysql_close(conn);
-        return GET_REQUEST;
+        return UPDATE_RESOURCE;
     }
 }
-
-
 
 
 // host state machine
@@ -768,6 +739,8 @@ http_conn::HTTP_CODE http_conn::process_read(){
 
         switch(m_check_stat){
             // parse a line
+            // at this state, we never return unless BAD_REQUEST detected
+            // cause we still need to 
             case CHECK_STATE_REQUESTLINE:
             {
                 ret = parse_request_line(text);
@@ -785,24 +758,23 @@ http_conn::HTTP_CODE http_conn::process_read(){
                 if(ret == BAD_REQUEST){
                     return BAD_REQUEST;
                 } else if (ret == GET_REQUEST){
-                    if (apireq) {return api_ret;}
                     return do_request();
-                } 
-                break;
+                } else if(ret == NO_REQUEST){
+                    break;
+                }
+                // in this logic, ret can also be other values except GET_REQUEST
+                return ret;
             }
             // parse body
             case CHECK_STATE_CONTENT:
             {
                 ret = parse_content(text);
-                // if(apireq){
-                //     return api_ret;
-                // }
                 if (ret == GET_REQUEST){
-                    if(apireq){return api_ret;}
                     return do_request();
+                } else if (ret != NO_REQUEST){
+                    return ret;
                 }
-                return ret;
-                // 
+                // when ret == NO_REQUEST
                 line_status = LINE_OPEN;
                 break;
             }
@@ -1025,8 +997,6 @@ bool http_conn::process_write(HTTP_CODE ret) {
             add_status_line(200, ok_200_title);
             add_headers(json_res.size(), "application/json");
             add_content(json_res.c_str());
-            // m_iv[0].iov_base = m_write_buf;
-            // m_iv[0].iov_len = m_write_index;
             distribute_data();
             m_iv_count = 1;
             return true;
@@ -1034,8 +1004,6 @@ bool http_conn::process_write(HTTP_CODE ret) {
             add_status_line(200, ok_200_title);
             add_headers(json_res.size(), "application/json");
             add_content(json_res.c_str());
-            // m_iv[0].iov_base = m_write_buf;
-            // m_iv[0].iov_len = m_write_index;
             distribute_data();
             m_iv_count = 1;
             return true;
@@ -1043,8 +1011,6 @@ bool http_conn::process_write(HTTP_CODE ret) {
             add_status_line(200, ok_200_title);
             add_headers(json_res.size(), "application/json");
             add_content(json_res.c_str());
-            // m_iv[0].iov_base = m_write_buf;
-            // m_iv[0].iov_len = m_write_index;
             distribute_data();
             m_iv_count = 1;
             return true;
