@@ -1,4 +1,5 @@
 #include "http_conn.h"
+#include "connection_pool.h"
 
 // Define some stat info of the HTTP response
 const char* ok_200_title = "OK";
@@ -266,22 +267,6 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char * text){
     // GET /api/user?id=x HTTP/1.1 
     if(strncmp(m_url, "/api/user", 9) == 0){
         apireq = 1;
-        // GET method
-        // if (m_method == GET){
-        //     api_ret = GET_RESOURCE;
-
-        //     // POST method
-        // } else if (m_method == POST){
-        //     api_ret = ADD_RESOURCE;
-
-        //     //PUT method
-        // } else if (m_method == PUT){
-        //     api_ret = UPDATE_RESOURCE;
-
-        //     // DELETE method
-        // } else if (m_method == DELETE){
-        //     api_ret = DELETE_RESOURCE;
-        // }
     }
 
     /**
@@ -292,10 +277,10 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char * text){
         m_url += 7;
         m_url = strchr(m_url, '/'); // index.html
     }
-
     if (!m_url || m_url[0] != '/'){
         return BAD_REQUEST;
     }
+
     // The request line parse finished
     // the check state become the check_state_header
     m_check_stat = CHECK_STATE_HEADER;
@@ -337,17 +322,20 @@ http_conn::HTTP_CODE http_conn::handle_get_user(){
     }
 
     // server connect to DB
-    MYSQL* conn = mysql_init(NULL);
-    conn = mysql_real_connect(
-        conn,
-        "sys-mysql",  // service name
-        "webuser",  // frmo compose
-        "webpass123", // from compose
-        "webdb",   // DB name
-        3306,
-        NULL,
-        0  
-    );
+    // MYSQL* conn = mysql_init(NULL);
+    // conn = mysql_real_connect(
+    //     conn,
+    //     "sys-mysql",  // service name
+    //     "webuser",  // from compose
+    //     "webpass123", // from compose
+    //     "webdb",   // DB name
+    //     3306,
+    //     NULL,
+    //     0  
+    // );
+
+    connection_pool* pool = connection_pool::get_instance();
+    MYSQL* conn = pool->get_connection();
 
     if(!conn){
         std::cout << "DB error: " << mysql_error(conn) << std::endl;
@@ -358,7 +346,7 @@ http_conn::HTTP_CODE http_conn::handle_get_user(){
     // validate
     if (!std::all_of(id.begin(), id.end(), ::isdigit)) {
         json_res = "{\"error\":\"invalid id\"}";
-        mysql_close(conn);
+        pool->release_connection(conn);
         return BAD_REQUEST;
     }
 
@@ -374,7 +362,7 @@ http_conn::HTTP_CODE http_conn::handle_get_user(){
     // query
     if (mysql_query(conn, sql.c_str())) {
         json_res = "{\"error\":\"query failed\"}";
-        mysql_close(conn);
+        pool->release_connection(conn);
         return BAD_REQUEST;
     }
 
@@ -383,7 +371,7 @@ http_conn::HTTP_CODE http_conn::handle_get_user(){
     if (!result) {
         json_res = "{\"error\":\"query failed\"}";
         mysql_free_result(result);
-        mysql_close(conn);
+        pool->release_connection(conn);
         return BAD_REQUEST;
     }
     MYSQL_ROW row = mysql_fetch_row(result);
@@ -400,7 +388,7 @@ http_conn::HTTP_CODE http_conn::handle_get_user(){
 
     json_res = res.dump();
     mysql_free_result(result);
-    mysql_close(conn);
+    pool->release_connection(conn);
     return GET_RESOURCE;
 }
 
@@ -424,15 +412,17 @@ http_conn::HTTP_CODE http_conn::handle_delete_user(){
     }
 
     // connect DB
-    MYSQL* conn = mysql_init(NULL);
-    conn = mysql_real_connect(conn,
-                "sys-mysql",
-                "webuser",
-                "webpass123",
-                "webdb",
-                3306,
-                NULL,
-                0);
+    // MYSQL* conn = mysql_init(NULL);
+    // conn = mysql_real_connect(conn,
+    //             "sys-mysql",
+    //             "webuser",
+    //             "webpass123",
+    //             "webdb",
+    //             3306,
+    //             NULL,
+    //             0);
+    connection_pool* pool = connection_pool::get_instance();
+    MYSQL* conn = pool->get_connection();
 
     if (!conn){
         json_res = "{\"error\":\"db connect failed\"}";
@@ -444,14 +434,14 @@ http_conn::HTTP_CODE http_conn::handle_delete_user(){
     // execute
     if (mysql_query(conn, sql.c_str())){
         json_res = "{\"error\":\"delete failed\"}";
-        mysql_close(conn);
+        pool->release_connection(conn);
         return BAD_REQUEST;
     }
 
     // check result
     if (mysql_affected_rows(conn) == 0){
         json_res = "{\"error\":\"user not found\"}";
-        mysql_close(conn);
+        pool->release_connection(conn);
         return BAD_REQUEST;
     } else {
         json_res = "{\"status\":\"deleted\"}";
@@ -612,29 +602,31 @@ http_conn::HTTP_CODE http_conn::handle_post_content(char * text){
             + values + ")";
 
     // connect to DB
-    MYSQL* conn = mysql_init(NULL);
-    conn = mysql_real_connect(conn,
-                    "sys-mysql", 
-                    "webuser", 
-                    "webpass123", 
-                    "webdb", 
-                    3306, 
-                    NULL, 
-                    0);
+    // MYSQL* conn = mysql_init(NULL);
+    // conn = mysql_real_connect(conn,
+    //                 "sys-mysql", 
+    //                 "webuser", 
+    //                 "webpass123", 
+    //                 "webdb", 
+    //                 3306, 
+    //                 NULL, 
+    //                 0);
+    connection_pool* pool = connection_pool::get_instance();
+    MYSQL* conn = pool->get_connection();
 
     if (!conn){
         json_res = "{\"error\":\"db connect failed\"}";
-        mysql_close(conn);
+        pool->release_connection(conn);
         return BAD_REQUEST;
     }
     
     if(mysql_query(conn, sql.c_str())){
         json_res = "{\"error\":\"insert failed\"}";
-        mysql_close(conn);
+        pool->release_connection(conn);
         return BAD_REQUEST;
     } else {
         json_res = "{\"status\":\"created\"}";
-        mysql_close(conn);
+        pool->release_connection(conn);
         return ADD_RESOURCE;
     }
 }
@@ -682,15 +674,17 @@ http_conn::HTTP_CODE http_conn::handle_put_content(char* text){
     set_clause.pop_back(); // remove last comma
 
     // 3. connect DB
-    MYSQL* conn = mysql_init(NULL);
-    conn = mysql_real_connect(conn,
-        "sys-mysql",
-        "webuser",
-        "webpass123",
-        "webdb",
-        3306,
-        NULL,
-        0);
+    // MYSQL* conn = mysql_init(NULL);
+    // conn = mysql_real_connect(conn,
+    //     "sys-mysql",
+    //     "webuser",
+    //     "webpass123",
+    //     "webdb",
+    //     3306,
+    //     NULL,
+    //     0);
+    connection_pool* pool = connection_pool::get_instance();
+    MYSQL* conn = pool->get_connection();
 
     if (!conn){
             json_res = "{\"error\":\"db connect failed\"}";
@@ -704,18 +698,18 @@ http_conn::HTTP_CODE http_conn::handle_put_content(char* text){
     // 5. execute
     if (mysql_query(conn, sql.c_str())){
         json_res = "{\"error\":\"update failed\"}";
-        mysql_close(conn);
+        pool->release_connection(conn);
         return BAD_REQUEST;
     }
 
     // 6. check affected rows
     if (mysql_affected_rows(conn) == 0){
         json_res = "{\"error\":\"user not found\"}";
-        mysql_close(conn);
+        pool->release_connection(conn);
         return BAD_REQUEST;
     } else {
         json_res = "{\"status\":\"updated\"}";
-        mysql_close(conn);
+        pool->release_connection(conn);
         return UPDATE_RESOURCE;
     }
 }

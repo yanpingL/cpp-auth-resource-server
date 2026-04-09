@@ -9,12 +9,14 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <sys/epoll.h>
+#include <signal.h>
+#include <libgen.h>
+
 #include "locker.h"
 #include "threadpool.h"
 #include "http_conn.h"
-#include <signal.h>
+#include "connection_pool.h"
 
-#include <libgen.h>
 
 #define MAX_FD 65535  // maximum #file descriptors
 #define MAX_EVENT_NUMBER 10000  // maximum #events to be listned
@@ -65,6 +67,17 @@ int main(int argc, char* argv[]){
     } catch(...){
         exit(-1);
     }
+
+    // creae connection pool
+    connection_pool* connPool = connection_pool::get_instance();
+    connPool->init(
+        "sys-mysql",
+        "webuser",
+        "webpass123",
+        "webdb",
+        3306,
+        10   // pool size
+    );
 
     // create an array to store all of the client infos, connection info
     http_conn * users = new http_conn[MAX_FD];
