@@ -1,4 +1,9 @@
 #include "http_conn.h"
+#include "connection_pool.h"
+#include "user_service.h"
+#include "logger.h"
+#include "auth_utils.h"
+#include "user_dao.h"
 
 // Define some stat info of the HTTP response
 const char* ok_200_title = "OK";
@@ -109,8 +114,6 @@ void http_conn::init(int sockfd, const sockaddr_in &addr){
     // add to epoll instance
     addfd(m_epollfd, m_sockfd, 1);
 
-    // total user number + 1
-    m_user_count++;
     init();
 } 
 
@@ -129,9 +132,9 @@ void http_conn::init(){
     m_read_index = 0;
     m_write_index = 0;
 
-    api_req = 0;
     json_res = "";
     apireq = 0;
+    // api_ret = NO_REQUEST;
 
     memset(m_read_buf, 0, READ_BUFFER_SIZE);
     memset(m_write_buf, 0, READ_BUFFER_SIZE);
@@ -141,6 +144,7 @@ void http_conn::init(){
 
 // repeately read data from client until no more data or connection closed
 // read data from the connection socket fd and store them in the read buffer
+// This function is called in MAIN THREAD by corresponding http_conn object
 bool http_conn::read(){
     if(m_read_index >= READ_BUFFER_SIZE)
         return false;
@@ -178,6 +182,9 @@ bool http_conn::read(){
     return true;
 }
 
+
+
+// From this position, the functions below called in CHILDREN THREADS (individual http_conn object)
 // parse one line, check based on \r\n
 /*
 .......\r\n
@@ -239,9 +246,13 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char * text){
     // need to update to other METHODS
     if (strcasecmp(method, "GET") == 0){
         m_method = GET;
-    } else {
-        return BAD_REQUEST;
-    }
+    } else if (strcasecmp(method, "POST") == 0){
+        m_method = POST;
+    } else if (strcasecmp(method, "PUT") == 0){
+        m_method = PUT;
+    } else if (strcasecmp(method, "DELETE") == 0){
+        m_method = DELETE;
+    } 
 
     // check the HTTP version: /index.html HTTP/1.1
     // if the m_version points to null, error
@@ -256,36 +267,39 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char * text){
         return BAD_REQUEST;
     }
 
-    // check if the request is GET /api/user?id=x HTTP/1.1 
-    if(strncmp(m_url, "/api/user", 9) == 0 && m_method == GET){
-        api_req = m_url;
-        return handle_get_user();
-    } else {
-        return BAD_REQUEST;
+    // check if the request is /api request
+    // GET /api/user?id=x HTTP/1.1 
+    if(strncmp(m_url, "/api/user", 9) == 0){
+        apireq = 1;
+    }
+    if(strncmp(m_url, "/api/login", 10) == 0){
+        apireq = 2;
+    }
+    if(strncmp(m_url, "/api/logout", 11) == 0){
+        apireq = 3;
     }
 
     /**
      * http://192.168.110.129:10000/index.html
     */
-
+    // non-api request, file request
     if (strncasecmp(m_url, "http://", 7) == 0 ){
         m_url += 7;
-
         m_url = strchr(m_url, '/'); // index.html
     }
-
     if (!m_url || m_url[0] != '/'){
         return BAD_REQUEST;
     }
+
     // The request line parse finished
     // the check state become the check_state_header
     m_check_stat = CHECK_STATE_HEADER;
     return NO_REQUEST;
 }
 
+
 //Implement GET/api/user (USING nlohmann/json)
 //GET/api/user?id=123 HTTP/1.1
-
 // helper function used in handle_get_user()
 void http_conn::parse_query(char* query_string, std::string& key, std::string& value) {
     char* equal = strchr(query_string, '=');
@@ -296,42 +310,95 @@ void http_conn::parse_query(char* query_string, std::string& key, std::string& v
     }
 }
 
+
 // need to complete the last half of the parse_request_line
 http_conn::HTTP_CODE http_conn::handle_get_user(){
+
+    // protect API
+    if (!UserDAO::validate_token(token)) {
+        json_res = "{\"error\":\"unauthorized\"}";
+        Logger::get_instance()->log(ERROR, "unauthorized");
+        return FORBIDDEN_REQUEST;
+    }
+
     //parse query 
     char* query = strchr(m_url, '?');
     std::string id = "unkonw";
 
     if (query){
         *query++ = '\0';
-
         std::string key, value;
         parse_query(query, key, value);
 
-        if(key == "id"){
+        if (key != "id") {
+            json_res = "{\"error\":\"invalid param\"}";
+            Logger::get_instance()->log(ERROR, "invalid param");
+            return BAD_REQUEST;
+        } else {
             id = value;
         }
     }
 
+    // validate the request ID
+    if (!std::all_of(id.begin(), id.end(), ::isdigit)) {
+        json_res = "{\"error\":\"invalid id\"}";
+        Logger::get_instance()->log(ERROR, "Invalid ID");
+        return BAD_REQUEST;
+    }
 
-    // build JSON
-    nlohmann::json res;
-    res["id"] = id;
-    res["name"] = "test_user";
+    // UserService layer to handle the service request
+    // the user_dao called inside the UserService handle the data layer
+    Logger::get_instance()->log(INFO, "GET /api/user?id=" + id);
+    json res = UserService::get_user(std::atoi(id.c_str()));
 
     json_res = res.dump();
+    if (res.contains("error")){
+        return BAD_REQUEST;
+    } else {
+        return GET_RESOURCE;
+    }
 
-    // // build HTTP respons
-    // add_status_line(200, ok_200_title);
-    // add_content_length(json_str.size());
-    // add_json_type();
-    // add_linger();
-    // add_blank_line();
-    // add_content(json_str.c_str());
-    m_check_stat = CHECK_STATE_HEADER;
-    apireq = 1;
+    
+}
 
-    return NO_REQUEST;
+
+/*
+DELETE /api/user?id=1 HTTP/1.1
+*/
+http_conn::HTTP_CODE http_conn::handle_delete_user(){
+
+    // protect API
+    if (!UserDAO::validate_token(token)) {
+        json_res = "{\"error\":\"unauthorized\"}";
+        Logger::get_instance()->log(ERROR, "unauthorized");
+        return FORBIDDEN_REQUEST;
+    }
+
+
+    char* query = strchr(m_url, '?');
+    std::string key, value;
+
+    if (query){
+        *query++ = '\0';
+        parse_query(query, key, value);
+    }
+
+    // validate id
+    if (key != "id" || !std::all_of(value.begin(), value.end(), ::isdigit)){
+        json_res = "{\"error\":\"invalid id\"}";
+        return BAD_REQUEST;
+    }
+
+    Logger::get_instance()->log(INFO, "DELETE /api/user?id=" + value);
+    json res = UserService::delete_user(atoi(value.c_str()));
+    json_res = res.dump();
+
+    if (res.contains("error")){
+        return BAD_REQUEST;
+    } else {
+        return DELETE_RESOURCE;
+    }
+    
 }
 
 
@@ -367,14 +434,32 @@ http_conn::HTTP_CODE http_conn::parse_headers(char * text){
     if(text[0] == '\0') {
         // if HTTP request has body, need to read m_content_length bytes body
         // state machine change to CHECK_STATE_CONTENT
+
+        // DELETE /api/user?id=... usually has no body.
+        // Execute handler once headers are fully parsed.
+        if (apireq == 1){
+            if (m_method == DELETE){
+                return handle_delete_user();
+            } else if(m_method == GET){
+                return handle_get_user();
+            } 
+        }
+        if (apireq == 2 && m_method == POST){
+            m_check_stat = CHECK_STATE_CONTENT;
+            return NO_REQUEST;
+        }
+        if (apireq == 3 && m_method == POST){
+            m_check_stat = CHECK_STATE_CONTENT;
+            return NO_REQUEST;
+        }
+
+        
         if (m_content_length != 0 ) {
             m_check_stat = CHECK_STATE_CONTENT;
             return NO_REQUEST; // request incomplete, still need to parse the body
         }
-        // parsed complete HTTP request
-        if (apireq){
-            return GET_USER;
-        }
+        
+        // file request
         return GET_REQUEST;
 
     } else if (strncasecmp( text, "Connection:", 11 ) == 0 ) {
@@ -399,6 +484,16 @@ http_conn::HTTP_CODE http_conn::parse_headers(char * text){
         text += strspn( text, " \t" );
         m_host = text;
 
+    } else if (strncasecmp(text, "Authorization:", 14) == 0) {
+        text += 14;
+        text += strspn(text, " \t");
+    
+        std::string auth = text;
+    
+        // expect: Bearer xxx
+        if (auth.find("Bearer ") == 0) {
+            token = auth.substr(7);
+        }
     } else {
         std::cout << "Oops! Unknown header " << text << std::endl;
     }
@@ -411,16 +506,211 @@ http_conn::HTTP_CODE http_conn::parse_headers(char * text){
 // Didn't really parse the HTTP request body, only check if it's fully read
 http_conn::HTTP_CODE http_conn::parse_content(char * text){
     if (m_read_index >= (m_content_length + m_checked_index ) )
-    {
+    {   
+        // ensure string end
         text[ m_content_length ] = '\0';
-        if (apireq){
-            return GET_USER;
+
+        // need to parse the content with POST method
+        if (m_method == POST && apireq == 1){
+            return handle_post_content(text);
+        } else if (m_method == PUT){
+            // only parse the full body content
+            return handle_put_content(text);
+        }  else if (m_method == POST && apireq == 2){
+            return handle_login(text);
+        } else if (m_method == POST && apireq == 3){
+            return handle_logout();
         }
         return GET_REQUEST;
     }
     return NO_REQUEST;
 }
 
+
+/*
+1. Still need to handlle when the post resource already exist
+2. 
+*/
+http_conn::HTTP_CODE http_conn::handle_post_content(char * text){
+    
+    // extract body
+    std::string body(text);
+    // debug
+    std::cout << "Body: " << body << std::endl;
+    Logger::get_instance()->log(INFO, "POST /api/user body=" + body);
+
+    // next step: parse JSON
+    json j = json::parse(body);
+
+    // validate id
+    if (!j.contains("id") || !j["id"].is_number_integer()){
+        json_res = "{\"error\":\"invalid id\"}";
+        return BAD_REQUEST;
+    }
+    int id = j["id"];
+    
+    // add the user resource back to db
+    std::set<std::string> allowed = {"id", "name", "email", "password"};
+    std::string cols;
+    std::string values;
+
+    for (auto it = j.begin(); it != j.end(); ++it){
+        std::string key = it.key();
+
+        // whitelist
+        if(!allowed.count(key)) continue;
+
+        cols += key + ",";
+
+        // number 
+        if(it.value().is_number()){
+            values += it.value().dump() + ",";
+        } else if (it.value().is_string()){
+            std::string val = it.value();
+
+            // ✅ hash password only
+            if (key == "password") {
+                val = sha256(val);
+            }
+
+            values += "'" + val + "',";
+        }
+    }
+
+    if(!cols.empty()) cols.pop_back();
+    if(!values.empty()) values.pop_back();
+
+    std::string sql =  std::string("INSERT INTO users ") + 
+                        "(" + cols + ") values (" + values + ")";
+    Logger::get_instance()->log(DEBUG, "SQL: " + sql);
+
+
+    
+    json res = UserService::create_user(sql);
+    json_res = res.dump();
+    if (res.contains("error")){
+        return BAD_REQUEST;
+    } else {
+        return ADD_RESOURCE;
+    }
+
+}
+
+
+// PUT METHOD
+http_conn::HTTP_CODE http_conn::handle_put_content(char* text){
+
+    // protect API
+    if (!UserDAO::validate_token(token)) {
+        json_res = "{\"error\":\"unauthorized\"}";
+        Logger::get_instance()->log(ERROR, "unauthorized");
+        return FORBIDDEN_REQUEST;
+    }
+
+
+    // debug
+    std::string body(text);
+    std::cout << "PUT Body: " << body << std::endl;
+    Logger::get_instance()->log(INFO, "PUT /api/user body=" + body);
+
+    json j = json::parse(body);
+
+    // 1. validate id
+    if (!j.contains("id") || !j["id"].is_number_integer()){
+        json_res = "{\"error\":\"invalid id\"}";
+        return BAD_REQUEST;
+    }
+    int id = j["id"];
+
+
+    // 2. build SET clause
+    std::string set_clause;
+    // add the user resource back to db
+    std::set<std::string> allowed = {"name", "email", "password"};
+
+    for (auto it = j.begin(); it != j.end();++it){
+        std::string key = it.key();
+
+        if(key == "id" || !allowed.count(key)) continue;
+
+        if (it.value().is_number()){
+            set_clause += key + "=" + it.value().dump() + ",";
+        } else if (it.value().is_string()){
+            std::string val = it.value();
+            set_clause += key + "='" + val + "',";
+        }
+    }
+
+    if(set_clause.empty()){
+        json_res = "{\"error\":\"no fields to update\"}";
+        return BAD_REQUEST;
+    }
+
+    set_clause.pop_back(); // remove last comma
+
+    // 4. build SQL
+    std::string sql = std::string("UPDATE users SET ") 
+                        + set_clause + " WHERE id=" + std::to_string(id);
+    Logger::get_instance()->log(DEBUG, "SQL: " + sql);
+    
+    
+    json res = UserService::update_user(sql);
+    json_res = res.dump();
+
+    if (res.contains("error")){
+        return BAD_REQUEST;
+    } else {
+        return UPDATE_RESOURCE;
+    }
+}
+
+// login function
+http_conn::HTTP_CODE http_conn::handle_login(char* text) {
+
+    std::string body(text);
+    Logger::get_instance()->log(INFO, "POST /api/login body=" + body);
+
+    json j = json::parse(body);
+
+    if (!j.contains("email") || !j.contains("password")) {
+        json_res = "{\"error\":\"missing fields\"}";
+        Logger::get_instance()->log(ERROR, json_res);
+        return BAD_REQUEST;
+    }
+
+    std::string email = j["email"];
+    std::string password = j["password"];
+
+    json res = UserService::login(email, password);
+    json_res = res.dump();
+
+    if (res.contains("error")) {
+        Logger::get_instance()->log(ERROR, res["error"]);
+        return BAD_REQUEST;
+    }
+
+    return GET_RESOURCE;  // return JSON
+}
+
+
+
+http_conn::HTTP_CODE http_conn::handle_logout() {
+
+    if (token.empty()) {
+        json_res = "{\"error\":\"no token\"}";
+        Logger::get_instance()->log(ERROR, "no token");
+        return BAD_REQUEST;
+    }
+
+    if (!UserDAO::delete_session(token)) {
+        json_res = "{\"error\":\"logout failed\"}";
+        Logger::get_instance()->log(ERROR, "logout failed.");
+        return INTERNAL_ERROR;
+    }
+
+    json_res = "{\"message\":\"logout success\"}";
+    return DELETE_RESOURCE;
+}
 
 
 
@@ -438,10 +728,14 @@ http_conn::HTTP_CODE http_conn::process_read(){
         // or parse the request body also complete data 
         text = get_line();
         m_start_line = m_checked_index; // move pointer to the poition needs to be parsed
-        std::cout << "got 1 http line: " << text << std::endl;
+        // std::cout << "got 1 http line: " << text << std::endl;
+        Logger::get_instance()->log(DEBUG,
+            std::string("HTTP line: ") + text);
 
         switch(m_check_stat){
             // parse a line
+            // at this state, we never return unless BAD_REQUEST detected
+            // cause we still need to 
             case CHECK_STATE_REQUESTLINE:
             {
                 ret = parse_request_line(text);
@@ -460,19 +754,22 @@ http_conn::HTTP_CODE http_conn::process_read(){
                     return BAD_REQUEST;
                 } else if (ret == GET_REQUEST){
                     return do_request();
-                } else if (ret == GET_USER){
-                    return GET_USER;
+                } else if(ret == NO_REQUEST){
+                    break;
                 }
-                break;
+                // in this logic, ret can also be other values except GET_REQUEST
+                return ret;
             }
             // parse body
             case CHECK_STATE_CONTENT:
             {
                 ret = parse_content(text);
-                if (ret== GET_REQUEST){
+                if (ret == GET_REQUEST){
                     return do_request();
+                } else if (ret != NO_REQUEST){
+                    return ret;
                 }
-                // 
+                // when ret == NO_REQUEST
                 line_status = LINE_OPEN;
                 break;
             }
@@ -549,6 +846,181 @@ void http_conn::unmap() {
 }
 
 
+// write the data to be send in the write buffer
+bool http_conn::add_response( const char* format, ... ) {
+    if( m_write_index >= WRITE_BUFFER_SIZE ) {
+        return false;
+    }
+    // arg_list = a cursor that walks through arguments
+    /*
+        va_list is a type used to access variable arguments in a function.
+        va_start initializes the argument list by pointing to the first
+        unnamed argument after the last fixed parameter. It allows functions
+        like vsnprintf to iterate through the arguments safely.
+    */
+    va_list arg_list;
+    va_start( arg_list, format );
+
+    /*
+    vsnprintf: Formats a string (like printf) and writes it into a buffer safely 
+    int vsnprintf(char *str, size_t size, const char *format, va_list ap);
+    - str: destination buffer
+    - size: maximum number of bytes to write
+    - format: format string ("%d %s")
+    - ap: list of arguments (from va_start)
+
+    return value: number of characters THAT WOULD HAVE BEEN WRITTEN
+    */
+
+    /*
+    va_start(arg_list, last_param);  // initialize
+    va_arg(arg_list, type);         // get next argument
+    va_end(arg_list);               // cleanup
+    */
+
+    int len = vsnprintf( m_write_buf + m_write_index, WRITE_BUFFER_SIZE - 1 - m_write_index, format, arg_list );
+    if( len >= ( WRITE_BUFFER_SIZE - 1 - m_write_index ) ) {
+        return false;
+    }
+    m_write_index += len;
+    va_end( arg_list );
+    return true;
+}
+
+
+bool http_conn::add_status_line( int status, const char* title ) {
+    return add_response( "%s %d %s\r\n", "HTTP/1.1", status, title );
+}
+
+
+bool http_conn::add_headers(int content_len, const char* type) {
+    add_content_length(content_len);
+    add_content_type(type);
+    add_linger();
+    add_blank_line();
+}
+
+
+bool http_conn::add_content_length(int content_len) {
+    return add_response( "Content-Length: %d\r\n", content_len );
+}
+
+bool http_conn::add_content_type(const char* type) {
+    return add_response("Content-Type: %s\r\n", type);
+}
+
+bool http_conn::add_linger()
+{
+    return add_response( "Connection: %s\r\n", ( m_linger == true ) ? "keep-alive" : "close" );
+}
+
+bool http_conn::add_blank_line()
+{
+    return add_response( "%s", "\r\n" );
+}
+
+
+bool http_conn::add_content( const char* content )
+{
+    return add_response( "%s", content );
+}
+
+
+// bool http_conn::add_json_type(){
+//     return add_response("Content-Type: application/%s\r\n", "json");
+// }
+
+
+// write the response to the write buffer
+bool http_conn::process_write(HTTP_CODE ret) {
+    switch (ret)
+    {
+        case INTERNAL_ERROR:
+            add_status_line( 500, error_500_title );
+            add_headers( strlen( error_500_form ), "text" );
+            if ( ! add_content( error_500_form ) ) {
+                return false;
+            }
+            break;
+        case BAD_REQUEST:
+            add_status_line(400, error_400_title);
+            if (apireq  == 1 && !json_res.empty()) {
+                add_headers(json_res.size(), "application/json");
+                if (!add_content(json_res.c_str())) {
+                    return false;
+                }
+            } else {
+                add_headers(strlen(error_400_form), "text");
+                if (!add_content(error_400_form)) {
+                    return false;
+                }
+            }
+            break;
+        case NO_RESOURCE:
+            add_status_line( 404, error_404_title );
+            add_headers( strlen( error_404_form ), "text"  );
+            if ( ! add_content( error_404_form ) ) {
+                return false;
+            }
+            break;
+        case FORBIDDEN_REQUEST:
+            add_status_line( 403, error_403_title );
+            add_headers(strlen( error_403_form), "text");
+            if ( ! add_content( error_403_form ) ) {
+                return false;
+            }
+            break;
+        case FILE_REQUEST:
+            add_status_line(200, ok_200_title );
+            add_headers(m_file_stat.st_size, "text");
+            // points to where the m_write_buf start
+            m_iv[ 0 ].iov_base = m_write_buf;
+            m_iv[ 0 ].iov_len = m_write_index;
+            m_iv[ 1 ].iov_base = m_file_address;
+            m_iv[ 1 ].iov_len = m_file_stat.st_size;
+            m_iv_count = 2;
+            return true;
+        case GET_RESOURCE:
+            add_status_line(200, ok_200_title);
+            add_headers(json_res.size(), "application/json");
+            add_content(json_res.c_str());
+            m_iv[0].iov_base = m_write_buf;
+            m_iv[0].iov_len = m_write_index;
+            m_iv_count = 1;
+            return true;
+        case ADD_RESOURCE:
+            add_status_line(200, ok_200_title);
+            add_headers(json_res.size(), "application/json");
+            add_content(json_res.c_str());
+            distribute_data();
+            m_iv_count = 1;
+            return true;
+        case UPDATE_RESOURCE:
+            add_status_line(200, ok_200_title);
+            add_headers(json_res.size(), "application/json");
+            add_content(json_res.c_str());
+            distribute_data();
+            m_iv_count = 1;
+            return true;
+        case DELETE_RESOURCE:
+            add_status_line(200, ok_200_title);
+            add_headers(json_res.size(), "application/json");
+            add_content(json_res.c_str());
+            distribute_data();
+            m_iv_count = 1;
+            return true;
+        default:
+            return false;
+    }
+
+    m_iv[ 0 ].iov_base = m_write_buf;
+    m_iv[ 0 ].iov_len = m_write_index;
+    m_iv_count = 1;
+    return true;
+}
+
+
+// Again, this function is called in the MAIN THREAD, by the corresponding http_conn object
 // write HTTP response to the m_sockfd
 bool http_conn::write(){
     int temp = 0;
@@ -632,152 +1104,6 @@ bool http_conn::write(){
 }
 
 
-// 往写缓冲中写入待发送的数据
-bool http_conn::add_response( const char* format, ... ) {
-    if( m_write_index >= WRITE_BUFFER_SIZE ) {
-        return false;
-    }
-    // arg_list = a cursor that walks through arguments
-    /*
-        va_list is a type used to access variable arguments in a function.
-        va_start initializes the argument list by pointing to the first
-        unnamed argument after the last fixed parameter. It allows functions
-        like vsnprintf to iterate through the arguments safely.
-    */
-    va_list arg_list;
-    va_start( arg_list, format );
-
-    /*
-    vsnprintf: Formats a string (like printf) and writes it into a buffer safely 
-    int vsnprintf(char *str, size_t size, const char *format, va_list ap);
-    - str: destination buffer
-    - size: maximum number of bytes to write
-    - format: format string ("%d %s")
-    - ap: list of arguments (from va_start)
-
-    return value: number of characters THAT WOULD HAVE BEEN WRITTEN
-    */
-
-    /*
-    va_start(arg_list, last_param);  // initialize
-    va_arg(arg_list, type);         // get next argument
-    va_end(arg_list);               // cleanup
-    */
-
-    int len = vsnprintf( m_write_buf + m_write_index, WRITE_BUFFER_SIZE - 1 - m_write_index, format, arg_list );
-    if( len >= ( WRITE_BUFFER_SIZE - 1 - m_write_index ) ) {
-        return false;
-    }
-    m_write_index += len;
-    va_end( arg_list );
-    return true;
-}
-
-
-bool http_conn::add_status_line( int status, const char* title ) {
-    return add_response( "%s %d %s\r\n", "HTTP/1.1", status, title );
-}
-
-
-bool http_conn::add_headers(int content_len, const char* type) {
-    add_content_length(content_len);
-    add_content_type(type);
-    add_linger();
-    add_blank_line();
-
-}
-
-
-bool http_conn::add_content_length(int content_len) {
-    return add_response( "Content-Length: %d\r\n", content_len );
-}
-
-bool http_conn::add_content_type(const char* type) {
-    return add_response("Content-Type: %s\r\n", type);
-}
-
-bool http_conn::add_linger()
-{
-    return add_response( "Connection: %s\r\n", ( m_linger == true ) ? "keep-alive" : "close" );
-}
-
-bool http_conn::add_blank_line()
-{
-    return add_response( "%s", "\r\n" );
-}
-
-
-bool http_conn::add_content( const char* content )
-{
-    return add_response( "%s", content );
-}
-
-
-// bool http_conn::add_json_type(){
-//     return add_response("Content-Type: application/%s\r\n", "json");
-// }
-
-
-// 根据服务器处理HTTP请求的结果，决定返回给客户端的内容
-// write the response to the write buffer
-bool http_conn::process_write(HTTP_CODE ret) {
-    switch (ret)
-    {
-        case INTERNAL_ERROR:
-            add_status_line( 500, error_500_title );
-            add_headers( strlen( error_500_form ), "text" );
-            if ( ! add_content( error_500_form ) ) {
-                return false;
-            }
-            break;
-        case BAD_REQUEST:
-            add_status_line( 400, error_400_title );
-            add_headers( strlen( error_400_form ), "text"  );
-            if ( ! add_content( error_400_form ) ) {
-                return false;
-            }
-            break;
-        case NO_RESOURCE:
-            add_status_line( 404, error_404_title );
-            add_headers( strlen( error_404_form ), "text"  );
-            if ( ! add_content( error_404_form ) ) {
-                return false;
-            }
-            break;
-        case FORBIDDEN_REQUEST:
-            add_status_line( 403, error_403_title );
-            add_headers(strlen( error_403_form), "text");
-            if ( ! add_content( error_403_form ) ) {
-                return false;
-            }
-            break;
-        case FILE_REQUEST:
-            add_status_line(200, ok_200_title );
-            add_headers(m_file_stat.st_size, "text");
-            // points to where the m_write_buf start
-            m_iv[ 0 ].iov_base = m_write_buf;
-            m_iv[ 0 ].iov_len = m_write_index;
-            m_iv[ 1 ].iov_base = m_file_address;
-            m_iv[ 1 ].iov_len = m_file_stat.st_size;
-            m_iv_count = 2;
-            return true;
-        case GET_USER:
-            add_status_line(200, ok_200_title);
-            add_headers(json_res.size(), "application/json");
-            add_content(json_res.c_str());
-            m_iv[0].iov_base = m_write_buf;
-            m_iv[0].iov_len = m_write_index;
-            m_iv_count = 1;
-            return true;
-        default:
-            return false;
-    }
-
-    m_iv[ 0 ].iov_base = m_write_buf;
-    m_iv[ 0 ].iov_len = m_write_index;
-    m_iv_count = 1;
-    return true;
-}
 
 // called by the threads in the threads poll
 // interface to process the request of HTTP

@@ -6,7 +6,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update -o Acquire::Retries=5 && \
     apt-get install -y --no-install-recommends \
       build-essential \
-      cmake\
+      cmake \
       git \
       curl \
       wget \
@@ -18,6 +18,7 @@ RUN apt-get update -o Acquire::Retries=5 && \
       manpages \
       manpages-dev \
       nlohmann-json3-dev \
+      libmysqlclient-dev \ 
     && yes | unminimize \
     && rm -rf /var/lib/apt/lists/*
 

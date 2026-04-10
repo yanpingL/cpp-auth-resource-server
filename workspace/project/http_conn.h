@@ -23,6 +23,10 @@
 #include <iostream>
 #include <string>
 #include <nlohmann/json.hpp>
+#include <mysql/mysql.h>
+#include <set>
+
+using json = nlohmann::ordered_json;
 
 class http_conn {
 public:
@@ -61,7 +65,7 @@ public:
     */
     enum HTTP_CODE { NO_REQUEST, GET_REQUEST, BAD_REQUEST, NO_RESOURCE, 
                     FORBIDDEN_REQUEST, FILE_REQUEST, INTERNAL_ERROR, CLOSED_CONNECTION,
-                    GET_USER};
+                    GET_RESOURCE, ADD_RESOURCE, UPDATE_RESOURCE, DELETE_RESOURCE};
     
     // 3 possible states of state machine --> read state of line:
     // 1.read complete line 2.error in line 3.incomplete data of the line
@@ -90,15 +94,23 @@ private:
     LINE_STATUS parse_line(); // parse one line, check based on \r\n
 
     // ===== RESTful API =====
-    HTTP_CODE handle_api_request();
     HTTP_CODE handle_get_user();
     void parse_query(char* query_string, std::string& key, std::string& value);
     bool add_json_type();
 
+    // helper function for POST method
+    HTTP_CODE handle_post_content(char * text);
+    // helper function for PUT method
+    HTTP_CODE handle_put_content(char * text);
+    // helper fuction for DELETE method
+    HTTP_CODE handle_delete_user();
+    HTTP_CODE handle_login(char* text);
+    HTTP_CODE handle_logout();
+
 
 
     bool process_write(HTTP_CODE ret); // create the HTTP response
-    // the following functions are called by the process_write to create the HTTP response
+    // the following functions are called by the process_write() to create the HTTP response
     void unmap();
     bool add_response( const char* format, ... );
     bool add_content( const char* content );
@@ -108,6 +120,10 @@ private:
     bool add_content_length( int content_length );
     bool add_linger();
     bool add_blank_line();
+    void distribute_data(){
+        m_iv[0].iov_base = m_write_buf;
+        m_iv[0].iov_len = m_write_index;
+    }
 
 
 
@@ -132,10 +148,12 @@ private:
     char* m_host;                           // 主机名
     int m_content_length;                   // HTTP请求的消息总长度
     bool m_linger;                          // HTTP请求是否要求保持连接
+    std::string token;                      // token 
 
-    char* api_req;                          // possible api request 
-    std::string json_res;
-    bool apireq;
+    std::string json_res;                   // string to store the JSON format result
+    int apireq;                            // check if it's api request
+    HTTP_CODE api_ret;                       // private variable to record the api request HTTP_CODE
+    
 
     char m_write_buf[ WRITE_BUFFER_SIZE ];  // 写缓冲区
     int m_write_index;                        // 写缓冲区中待发送的字节数
