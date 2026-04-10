@@ -1,5 +1,6 @@
 #include "http_conn.h"
 #include "connection_pool.h"
+#include "user_service.h"
 
 // Define some stat info of the HTTP response
 const char* ok_200_title = "OK";
@@ -309,7 +310,6 @@ http_conn::HTTP_CODE http_conn::handle_get_user(){
 
     if (query){
         *query++ = '\0';
-
         std::string key, value;
         parse_query(query, key, value);
 
@@ -321,75 +321,24 @@ http_conn::HTTP_CODE http_conn::handle_get_user(){
         }
     }
 
-    // server connect to DB
-    // MYSQL* conn = mysql_init(NULL);
-    // conn = mysql_real_connect(
-    //     conn,
-    //     "sys-mysql",  // service name
-    //     "webuser",  // from compose
-    //     "webpass123", // from compose
-    //     "webdb",   // DB name
-    //     3306,
-    //     NULL,
-    //     0  
-    // );
-
-    connection_pool* pool = connection_pool::get_instance();
-    MYSQL* conn = pool->get_connection();
-
-    if(!conn){
-        std::cout << "DB error: " << mysql_error(conn) << std::endl;
-        json_res = "{\"error\":\"db connect failed\"}";
-        return BAD_REQUEST;
-    }
-
-    // validate
+    // validate the request ID
     if (!std::all_of(id.begin(), id.end(), ::isdigit)) {
         json_res = "{\"error\":\"invalid id\"}";
-        pool->release_connection(conn);
         return BAD_REQUEST;
     }
 
-    // escape
-    std::string safe;
-    safe.resize(id.length() * 2 + 1);
-    mysql_real_escape_string(conn, safe.data(), id.c_str(), id.length());
-
-    // build SQL
-    std::string sql =
-    "SELECT id, name, email FROM users WHERE id=" + std::string(safe.data());
-
-    // query
-    if (mysql_query(conn, sql.c_str())) {
-        json_res = "{\"error\":\"query failed\"}";
-        pool->release_connection(conn);
-        return BAD_REQUEST;
-    }
-
-    // result
-    MYSQL_RES* result = mysql_store_result(conn);
-    if (!result) {
-        json_res = "{\"error\":\"query failed\"}";
-        mysql_free_result(result);
-        pool->release_connection(conn);
-        return BAD_REQUEST;
-    }
-    MYSQL_ROW row = mysql_fetch_row(result);
-
-    // build JSON
-    json res;
-    if (row){
-        res["id"] = row[0];
-        res["name"] = row[1];
-        res["email"] = row[2];
-    } else {
-        res["error"] = "user not found";
-    }
+    // UserService layer to handle the service request
+    // the user_dao called inside the UserService handle the data layer
+    json res = UserService::get_user(std::atoi(id.c_str()));
 
     json_res = res.dump();
-    mysql_free_result(result);
-    pool->release_connection(conn);
-    return GET_RESOURCE;
+    if (res.contains("error")){
+        return BAD_REQUEST;
+    } else {
+        return GET_RESOURCE;
+    }
+
+    
 }
 
 
@@ -411,43 +360,15 @@ http_conn::HTTP_CODE http_conn::handle_delete_user(){
         return BAD_REQUEST;
     }
 
-    // connect DB
-    // MYSQL* conn = mysql_init(NULL);
-    // conn = mysql_real_connect(conn,
-    //             "sys-mysql",
-    //             "webuser",
-    //             "webpass123",
-    //             "webdb",
-    //             3306,
-    //             NULL,
-    //             0);
-    connection_pool* pool = connection_pool::get_instance();
-    MYSQL* conn = pool->get_connection();
+    json res = UserService::delete_user(atoi(value.c_str()));
+    json_res = res.dump();
 
-    if (!conn){
-        json_res = "{\"error\":\"db connect failed\"}";
-        return BAD_REQUEST;
-    }
-
-    std::string sql = "DELETE FROM users WHERE id=" + value;
-
-    // execute
-    if (mysql_query(conn, sql.c_str())){
-        json_res = "{\"error\":\"delete failed\"}";
-        pool->release_connection(conn);
-        return BAD_REQUEST;
-    }
-
-    // check result
-    if (mysql_affected_rows(conn) == 0){
-        json_res = "{\"error\":\"user not found\"}";
-        pool->release_connection(conn);
+    if (res.contains("error")){
         return BAD_REQUEST;
     } else {
-        json_res = "{\"status\":\"deleted\"}";
         return DELETE_RESOURCE;
     }
-
+    
 }
 
 
@@ -598,37 +519,18 @@ http_conn::HTTP_CODE http_conn::handle_post_content(char * text){
     if(!cols.empty()) cols.pop_back();
     if(!values.empty()) values.pop_back();
 
-    std::string sql =  std::string("INSERT INTO users ") + "(" + cols + ") values ("
-            + values + ")";
+    std::string sql =  std::string("INSERT INTO users ") + 
+                        "(" + cols + ") values (" + values + ")";
 
-    // connect to DB
-    // MYSQL* conn = mysql_init(NULL);
-    // conn = mysql_real_connect(conn,
-    //                 "sys-mysql", 
-    //                 "webuser", 
-    //                 "webpass123", 
-    //                 "webdb", 
-    //                 3306, 
-    //                 NULL, 
-    //                 0);
-    connection_pool* pool = connection_pool::get_instance();
-    MYSQL* conn = pool->get_connection();
 
-    if (!conn){
-        json_res = "{\"error\":\"db connect failed\"}";
-        pool->release_connection(conn);
-        return BAD_REQUEST;
-    }
-    
-    if(mysql_query(conn, sql.c_str())){
-        json_res = "{\"error\":\"insert failed\"}";
-        pool->release_connection(conn);
+    json res = UserService::create_user(sql);
+    json_res = res.dump();
+    if (res.contains("error")){
         return BAD_REQUEST;
     } else {
-        json_res = "{\"status\":\"created\"}";
-        pool->release_connection(conn);
         return ADD_RESOURCE;
     }
+
 }
 
 
@@ -673,43 +575,16 @@ http_conn::HTTP_CODE http_conn::handle_put_content(char* text){
 
     set_clause.pop_back(); // remove last comma
 
-    // 3. connect DB
-    // MYSQL* conn = mysql_init(NULL);
-    // conn = mysql_real_connect(conn,
-    //     "sys-mysql",
-    //     "webuser",
-    //     "webpass123",
-    //     "webdb",
-    //     3306,
-    //     NULL,
-    //     0);
-    connection_pool* pool = connection_pool::get_instance();
-    MYSQL* conn = pool->get_connection();
-
-    if (!conn){
-            json_res = "{\"error\":\"db connect failed\"}";
-            return BAD_REQUEST;
-    }
-
     // 4. build SQL
     std::string sql = std::string("UPDATE users SET ") 
                         + set_clause + " WHERE id=" + std::to_string(id);
+    
+    json res = UserService::update_user(sql);
+    json_res = res.dump();
 
-    // 5. execute
-    if (mysql_query(conn, sql.c_str())){
-        json_res = "{\"error\":\"update failed\"}";
-        pool->release_connection(conn);
-        return BAD_REQUEST;
-    }
-
-    // 6. check affected rows
-    if (mysql_affected_rows(conn) == 0){
-        json_res = "{\"error\":\"user not found\"}";
-        pool->release_connection(conn);
+    if (res.contains("error")){
         return BAD_REQUEST;
     } else {
-        json_res = "{\"status\":\"updated\"}";
-        pool->release_connection(conn);
         return UPDATE_RESOURCE;
     }
 }
