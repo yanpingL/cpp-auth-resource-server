@@ -35,6 +35,7 @@ void connection_pool::init(std::string url, std::string user,
 
         if (!conn) {
             std::cout << "MySQL init error\n";
+            Logger::get_instance()->log(ERROR, "MySQL connect error");
             exit(1);
         }
 
@@ -49,6 +50,7 @@ void connection_pool::init(std::string url, std::string user,
 
         if (!conn) {
             std::cout << "MySQL connect error\n";
+            Logger::get_instance()->log(ERROR, "MySQL connect error");
             exit(1);
         }
 

@@ -16,6 +16,8 @@
 #include "threadpool.h"
 #include "http_conn.h"
 #include "connection_pool.h"
+#include "logger.h"
+
 
 
 #define MAX_FD 65535  // maximum #file descriptors
@@ -79,6 +81,10 @@ int main(int argc, char* argv[]){
         10   // pool size
     );
 
+    // creat the logger instance and initalize it
+    Logger::get_instance()->init("server.log");
+
+
     // create an array to store all of the client infos, connection info
     http_conn * users = new http_conn[MAX_FD];
 
@@ -117,7 +123,8 @@ int main(int argc, char* argv[]){
         int num = epoll_wait(epollfd, events, MAX_EVENT_NUMBER, -1);
         //
         if ((num < 0) && (errno != EINTR)){
-            std::cout << "epoll failure\n";
+            // std::cout << "epoll failure\n";
+            Logger::get_instance()->log(ERROR, "epoll failure");
             break;
         }
 
@@ -131,7 +138,9 @@ int main(int argc, char* argv[]){
                 int connfd = accept(listenfd, (struct sockaddr*)&client_address, &client_addrlen);
 
                 if (connfd < 0) {
-                    std::cout << "errno is : " << errno << std::endl;
+                    // std::cout << "errno is : " << errno << std::endl;
+                    Logger::get_instance()->log(ERROR,
+                        "accept error, errno=" + std::to_string(errno));
                     continue;
                 }
                 

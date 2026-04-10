@@ -68,6 +68,8 @@ m_stop(false), m_threads(NULL) {
         // create thread_number threads and detach them
         for (int i = 0; i < thread_number; ++i){
             std::cout << "Create the " << i << "th thread\n";
+            Logger::get_instance()->log(INFO, "Create thread " + std::to_string(i));
+            
             // create a thread and ask it to wait for task availabel in the m_workqueue
             if(pthread_create(m_threads + i, NULL, worker, this) != 0) {
                 delete [] m_threads;

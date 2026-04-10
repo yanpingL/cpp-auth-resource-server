@@ -304,6 +304,7 @@ void http_conn::parse_query(char* query_string, std::string& key, std::string& v
 
 // need to complete the last half of the parse_request_line
 http_conn::HTTP_CODE http_conn::handle_get_user(){
+
     //parse query 
     char* query = strchr(m_url, '?');
     std::string id = "unkonw";
@@ -315,6 +316,7 @@ http_conn::HTTP_CODE http_conn::handle_get_user(){
 
         if (key != "id") {
             json_res = "{\"error\":\"invalid param\"}";
+            Logger::get_instance()->log(ERROR, "Invalid ID");
             return BAD_REQUEST;
         } else {
             id = value;
@@ -324,11 +326,14 @@ http_conn::HTTP_CODE http_conn::handle_get_user(){
     // validate the request ID
     if (!std::all_of(id.begin(), id.end(), ::isdigit)) {
         json_res = "{\"error\":\"invalid id\"}";
+        Logger::get_instance()->log(ERROR, "Invalid ID");
         return BAD_REQUEST;
     }
 
     // UserService layer to handle the service request
     // the user_dao called inside the UserService handle the data layer
+    Logger::get_instance()->log(INFO,
+        "GET /api/user?id=" + id);
     json res = UserService::get_user(std::atoi(id.c_str()));
 
     json_res = res.dump();
@@ -360,6 +365,8 @@ http_conn::HTTP_CODE http_conn::handle_delete_user(){
         return BAD_REQUEST;
     }
 
+    Logger::get_instance()->log(INFO,
+        "DELETE /api/user?id=" + value);
     json res = UserService::delete_user(atoi(value.c_str()));
     json_res = res.dump();
 
@@ -484,6 +491,8 @@ http_conn::HTTP_CODE http_conn::handle_post_content(char * text){
     std::string body(text);
     // debug
     std::cout << "Body: " << body << std::endl;
+    Logger::get_instance()->log(INFO, "POST /api/user body=" + body);
+
     // next step: parse JSON
     json j = json::parse(body);
 
@@ -521,8 +530,10 @@ http_conn::HTTP_CODE http_conn::handle_post_content(char * text){
 
     std::string sql =  std::string("INSERT INTO users ") + 
                         "(" + cols + ") values (" + values + ")";
+    Logger::get_instance()->log(DEBUG, "SQL: " + sql);
 
 
+    
     json res = UserService::create_user(sql);
     json_res = res.dump();
     if (res.contains("error")){
@@ -539,6 +550,7 @@ http_conn::HTTP_CODE http_conn::handle_put_content(char* text){
     // debug
     std::string body(text);
     std::cout << "PUT Body: " << body << std::endl;
+    Logger::get_instance()->log(INFO, "PUT /api/user body=" + body);
 
     json j = json::parse(body);
 
@@ -578,6 +590,8 @@ http_conn::HTTP_CODE http_conn::handle_put_content(char* text){
     // 4. build SQL
     std::string sql = std::string("UPDATE users SET ") 
                         + set_clause + " WHERE id=" + std::to_string(id);
+    Logger::get_instance()->log(DEBUG, "SQL: " + sql);
+    
     
     json res = UserService::update_user(sql);
     json_res = res.dump();
@@ -604,7 +618,9 @@ http_conn::HTTP_CODE http_conn::process_read(){
         // or parse the request body also complete data 
         text = get_line();
         m_start_line = m_checked_index; // move pointer to the poition needs to be parsed
-        std::cout << "got 1 http line: " << text << std::endl;
+        // std::cout << "got 1 http line: " << text << std::endl;
+        Logger::get_instance()->log(DEBUG,
+            std::string("HTTP line: ") + text);
 
         switch(m_check_stat){
             // parse a line

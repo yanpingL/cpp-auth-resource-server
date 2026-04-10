@@ -14,9 +14,11 @@ std::optional<User> UserDAO::get_user_by_id(int id){
 
     std::string sql = 
         "SELECT id, name, email FROM users WHERE id=" + std::to_string(id);
+    Logger::get_instance()->log(DEBUG, "SQL: " + sql);
     
     if(mysql_query(conn, sql.c_str())){
         msg = std::string("DB connection failed.");
+        Logger::get_instance()->log(ERROR, msg);
         pool->release_connection(conn);
         return std::nullopt;
     }
@@ -24,6 +26,7 @@ std::optional<User> UserDAO::get_user_by_id(int id){
     MYSQL_RES* result = mysql_store_result(conn);
     if (!result){
         msg = std::string("Query failed.");
+        Logger::get_instance()->log(ERROR, msg);
         pool->release_connection(conn);
         return std::nullopt;
     }
@@ -31,6 +34,7 @@ std::optional<User> UserDAO::get_user_by_id(int id){
     MYSQL_ROW row = mysql_fetch_row(result);
     if (!row){
         msg = std::string("result not found.");
+        Logger::get_instance()->log(ERROR, msg);
         mysql_free_result(result);
         pool->release_connection(conn);
         return std::nullopt;
@@ -60,15 +64,21 @@ bool UserDAO::delete_user(int id) {
     // Need to change the name of the DB to make it changeable 
     std::string sql =
         "DELETE FROM users WHERE id=" + std::to_string(id);
+    Logger::get_instance()->log(DEBUG, "SQL: " + sql);
 
     if (mysql_query(conn, sql.c_str())) {
         msg = std::string("Query failed.");
+        Logger::get_instance()->log(ERROR, "Query failed: " + sql);
         pool->release_connection(conn);
         return false;
     }
 
     bool success = mysql_affected_rows(conn) > 0;
-    if (!success) msg = std::string("Resource not found.");
+    if (!success) {
+        msg = std::string("Resource not found.");
+        Logger::get_instance()->log(ERROR, msg);
+
+    }
 
     pool->release_connection(conn);
     return success;
@@ -82,11 +92,14 @@ bool UserDAO::create_user(const std::string& sql) {
 
     if (!conn) {
         msg = std::string("DB connection failed.");
+        Logger::get_instance()->log(ERROR, msg);
         return false;
     }
     bool success = (mysql_query(conn, sql.c_str()) == 0);
-    if (!success) msg = std::string("Query failed.");
-
+    if (!success) {
+        msg = std::string("Query failed.");
+        Logger::get_instance()->log(ERROR, "Query failed: " + sql);
+    }
 
     pool->release_connection(conn);
     return success;
@@ -100,18 +113,22 @@ bool UserDAO::update_user(const std::string& sql) {
 
     if (!conn) {
         msg = std::string("DB connection failed.");
+        Logger::get_instance()->log(ERROR, "DB connection failed.");
         return false;
     }
 
     if (mysql_query(conn, sql.c_str())) {
         msg = std::string("Query failed.");
+        Logger::get_instance()->log(ERROR, "Query failed: " + sql);
         pool->release_connection(conn);
         return false;
     }
 
     bool success = mysql_affected_rows(conn) > 0;
-    if (!success) msg = std::string("Resource not found.");
-
+    if (!success) {
+        msg = std::string("Resource not found.");
+        Logger::get_instance()->log(ERROR, msg);
+    }    
     pool->release_connection(conn);
     return success;
 }
