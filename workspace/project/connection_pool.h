@@ -5,6 +5,7 @@
 #include <queue>
 #include <string>
 #include "locker.h"
+#include "logger.h"
 
 class connection_pool {
 public:

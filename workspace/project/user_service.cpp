@@ -1,5 +1,6 @@
 #include "user_service.h"
 #include "user_dao.h"
+#include "auth_utils.h"
 
 json_type UserService::get_user(int id) {
     auto user_opt = UserDAO::get_user_by_id(id);
@@ -64,6 +65,44 @@ json_type UserService::update_user(const std::string& sql) {
     } else {
         res["status"] = "updated";
     }
+
+    return res;
+}
+
+
+
+json_type UserService::login(const std::string& email, const std::string& password) {
+
+    auto user_opt = UserDAO::get_user_by_email(email);
+
+    json_type res;
+
+    if (!user_opt.has_value()) {
+        res["error"] = "user not found";
+        return res;
+    }
+
+    const auto& user = user_opt.value();
+
+    // HASH compare
+    if (user.password != sha256(password)) {
+        res["error"] = "wrong password";
+        return res;
+    }
+
+    // generate token (simple version)
+    std::string token = generate_token();
+
+    // store session
+    std::string sql =
+        "INSERT INTO sessions (user_id, token) VALUES (" +
+        std::to_string(user.id) + ", '" + token + "')";
+    
+    // add info to sessions table
+    UserDAO::create_user(sql);  // reuse existing function
+
+    res["token"] = token;
+    res["user_id"] = user.id;
 
     return res;
 }

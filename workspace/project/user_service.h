@@ -13,6 +13,7 @@ public:
     static json_type delete_user(int id);
     static json_type create_user(const std::string& sql);
     static json_type update_user(const std::string& sql);
+    static json_type login(const std::string& email, const std::string& password);
 };
 
 #endif

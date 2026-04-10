@@ -1,5 +1,6 @@
 #include "user_dao.h"
 #include "connection_pool.h"
+#include "logger.h"
 #include <mysql/mysql.h>
 #include <iostream>
 
@@ -136,3 +137,117 @@ bool UserDAO::update_user(const std::string& sql) {
 
 
 
+std::optional<User> UserDAO::get_user_by_email(const std::string& email){
+
+    connection_pool* pool = connection_pool::get_instance();
+    MYSQL* conn = pool->get_connection();
+
+    if(!conn) {
+        msg = std::string("DB connection failed.");
+        Logger::get_instance()->log(ERROR, msg);
+        return std::nullopt;
+    }
+
+    std::string sql =
+        "SELECT id, name, email, password FROM users WHERE email='" + email + "'";
+
+    Logger::get_instance()->log(DEBUG, "SQL: " + sql);
+
+    if(mysql_query(conn, sql.c_str())){
+        msg = "Query failed";
+        Logger::get_instance()->log(ERROR, msg);
+        pool->release_connection(conn);
+        return std::nullopt;
+    }
+
+    MYSQL_RES* result = mysql_store_result(conn);
+    if (!result){
+        msg = "User not found";
+        Logger::get_instance()->log(ERROR, msg);
+
+        pool->release_connection(conn);
+        return std::nullopt;
+    }
+
+    MYSQL_ROW row = mysql_fetch_row(result);
+    if (!row){
+        msg = "User not found";
+        Logger::get_instance()->log(ERROR, msg);
+
+        mysql_free_result(result);
+        pool->release_connection(conn);
+        return std::nullopt;
+    }
+
+    User user;
+    user.id = atoi(row[0]);
+    user.name = row[1];
+    user.email = row[2];
+    user.password = row[3];   // ⚠️ add this field
+
+    mysql_free_result(result);
+    pool->release_connection(conn);
+
+    return user;
+}
+
+
+
+bool UserDAO::validate_token(const std::string& token) {
+
+    connection_pool* pool = connection_pool::get_instance();
+    MYSQL* conn = pool->get_connection();
+
+    if (!conn) {
+        msg = std::string("DB connection failed.");
+        Logger::get_instance()->log(ERROR, msg);
+        return false;
+    }
+
+    std::string sql = "SELECT user_id FROM sessions WHERE token='" + token + "'";
+    Logger::get_instance()->log(DEBUG, "SQL: " + sql);
+
+    if (mysql_query(conn, sql.c_str())) {
+        msg = "Query failed";
+        Logger::get_instance()->log(ERROR, msg);
+        pool->release_connection(conn);
+        return false;
+    }
+
+    MYSQL_RES* result = mysql_store_result(conn);
+    if (!result) {
+        msg = "User not found";
+        Logger::get_instance()->log(ERROR, msg);
+        pool->release_connection(conn);
+        return false;
+    }
+
+    MYSQL_ROW row = mysql_fetch_row(result);
+
+    mysql_free_result(result);
+    pool->release_connection(conn);
+
+    return row != nullptr;
+}
+
+
+
+bool UserDAO::delete_session(const std::string& token) {
+
+    connection_pool* pool = connection_pool::get_instance();
+    MYSQL* conn = pool->get_connection();
+
+    if (!conn) {
+        msg = std::string("DB connection failed.");
+        Logger::get_instance()->log(ERROR, msg);
+        return false;
+    }
+
+    std::string sql =
+        "DELETE FROM sessions WHERE token='" + token + "'";
+
+    bool success = (mysql_query(conn, sql.c_str()) == 0);
+
+    pool->release_connection(conn);
+    return success;
+}

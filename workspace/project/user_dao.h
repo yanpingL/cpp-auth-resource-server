@@ -11,6 +11,7 @@ struct User{
     int id;
     std::string name;
     std::string email;
+    std::string password;
 };
 
 class UserDAO {
@@ -26,6 +27,12 @@ public:
 
     // reuse the existing UPDATE sql
     static bool update_user(const std::string& sql);
+
+    static std::optional<User> get_user_by_email(const std::string& email);
+
+    static bool validate_token(const std::string& token);
+
+    static bool delete_session(const std::string& token);
 };
 
 

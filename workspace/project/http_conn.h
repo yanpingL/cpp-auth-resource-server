@@ -104,6 +104,8 @@ private:
     HTTP_CODE handle_put_content(char * text);
     // helper fuction for DELETE method
     HTTP_CODE handle_delete_user();
+    HTTP_CODE handle_login(char* text);
+    HTTP_CODE handle_logout();
 
 
 
@@ -146,10 +148,12 @@ private:
     char* m_host;                           // 主机名
     int m_content_length;                   // HTTP请求的消息总长度
     bool m_linger;                          // HTTP请求是否要求保持连接
+    std::string token;                      // token 
 
     std::string json_res;                   // string to store the JSON format result
-    bool apireq;                            // check if it's api request
+    int apireq;                            // check if it's api request
     HTTP_CODE api_ret;                       // private variable to record the api request HTTP_CODE
+    
 
     char m_write_buf[ WRITE_BUFFER_SIZE ];  // 写缓冲区
     int m_write_index;                        // 写缓冲区中待发送的字节数

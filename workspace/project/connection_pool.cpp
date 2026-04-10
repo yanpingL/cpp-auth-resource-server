@@ -1,5 +1,6 @@
 #include <iostream>
 #include "connection_pool.h"
+#include "locker.h"
 
 connection_pool::connection_pool(){
     cur_conn = 0;

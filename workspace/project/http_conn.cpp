@@ -1,6 +1,9 @@
 #include "http_conn.h"
 #include "connection_pool.h"
 #include "user_service.h"
+#include "logger.h"
+#include "auth_utils.h"
+#include "user_dao.h"
 
 // Define some stat info of the HTTP response
 const char* ok_200_title = "OK";
@@ -269,6 +272,12 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char * text){
     if(strncmp(m_url, "/api/user", 9) == 0){
         apireq = 1;
     }
+    if(strncmp(m_url, "/api/login", 10) == 0){
+        apireq = 2;
+    }
+    if(strncmp(m_url, "/api/logout", 11) == 0){
+        apireq = 3;
+    }
 
     /**
      * http://192.168.110.129:10000/index.html
@@ -305,6 +314,13 @@ void http_conn::parse_query(char* query_string, std::string& key, std::string& v
 // need to complete the last half of the parse_request_line
 http_conn::HTTP_CODE http_conn::handle_get_user(){
 
+    // protect API
+    if (!UserDAO::validate_token(token)) {
+        json_res = "{\"error\":\"unauthorized\"}";
+        Logger::get_instance()->log(ERROR, "unauthorized");
+        return FORBIDDEN_REQUEST;
+    }
+
     //parse query 
     char* query = strchr(m_url, '?');
     std::string id = "unkonw";
@@ -316,7 +332,7 @@ http_conn::HTTP_CODE http_conn::handle_get_user(){
 
         if (key != "id") {
             json_res = "{\"error\":\"invalid param\"}";
-            Logger::get_instance()->log(ERROR, "Invalid ID");
+            Logger::get_instance()->log(ERROR, "invalid param");
             return BAD_REQUEST;
         } else {
             id = value;
@@ -332,8 +348,7 @@ http_conn::HTTP_CODE http_conn::handle_get_user(){
 
     // UserService layer to handle the service request
     // the user_dao called inside the UserService handle the data layer
-    Logger::get_instance()->log(INFO,
-        "GET /api/user?id=" + id);
+    Logger::get_instance()->log(INFO, "GET /api/user?id=" + id);
     json res = UserService::get_user(std::atoi(id.c_str()));
 
     json_res = res.dump();
@@ -351,6 +366,15 @@ http_conn::HTTP_CODE http_conn::handle_get_user(){
 DELETE /api/user?id=1 HTTP/1.1
 */
 http_conn::HTTP_CODE http_conn::handle_delete_user(){
+
+    // protect API
+    if (!UserDAO::validate_token(token)) {
+        json_res = "{\"error\":\"unauthorized\"}";
+        Logger::get_instance()->log(ERROR, "unauthorized");
+        return FORBIDDEN_REQUEST;
+    }
+
+
     char* query = strchr(m_url, '?');
     std::string key, value;
 
@@ -365,8 +389,7 @@ http_conn::HTTP_CODE http_conn::handle_delete_user(){
         return BAD_REQUEST;
     }
 
-    Logger::get_instance()->log(INFO,
-        "DELETE /api/user?id=" + value);
+    Logger::get_instance()->log(INFO, "DELETE /api/user?id=" + value);
     json res = UserService::delete_user(atoi(value.c_str()));
     json_res = res.dump();
 
@@ -414,13 +437,22 @@ http_conn::HTTP_CODE http_conn::parse_headers(char * text){
 
         // DELETE /api/user?id=... usually has no body.
         // Execute handler once headers are fully parsed.
-        if (apireq){
+        if (apireq == 1){
             if (m_method == DELETE){
                 return handle_delete_user();
             } else if(m_method == GET){
                 return handle_get_user();
             } 
         }
+        if (apireq == 2 && m_method == POST){
+            m_check_stat = CHECK_STATE_CONTENT;
+            return NO_REQUEST;
+        }
+        if (apireq == 3 && m_method == POST){
+            m_check_stat = CHECK_STATE_CONTENT;
+            return NO_REQUEST;
+        }
+
         
         if (m_content_length != 0 ) {
             m_check_stat = CHECK_STATE_CONTENT;
@@ -452,6 +484,16 @@ http_conn::HTTP_CODE http_conn::parse_headers(char * text){
         text += strspn( text, " \t" );
         m_host = text;
 
+    } else if (strncasecmp(text, "Authorization:", 14) == 0) {
+        text += 14;
+        text += strspn(text, " \t");
+    
+        std::string auth = text;
+    
+        // expect: Bearer xxx
+        if (auth.find("Bearer ") == 0) {
+            token = auth.substr(7);
+        }
     } else {
         std::cout << "Oops! Unknown header " << text << std::endl;
     }
@@ -469,12 +511,16 @@ http_conn::HTTP_CODE http_conn::parse_content(char * text){
         text[ m_content_length ] = '\0';
 
         // need to parse the content with POST method
-        if (m_method == POST){
+        if (m_method == POST && apireq == 1){
             return handle_post_content(text);
         } else if (m_method == PUT){
             // only parse the full body content
             return handle_put_content(text);
-        } 
+        }  else if (m_method == POST && apireq == 2){
+            return handle_login(text);
+        } else if (m_method == POST && apireq == 3){
+            return handle_logout();
+        }
         return GET_REQUEST;
     }
     return NO_REQUEST;
@@ -521,6 +567,12 @@ http_conn::HTTP_CODE http_conn::handle_post_content(char * text){
             values += it.value().dump() + ",";
         } else if (it.value().is_string()){
             std::string val = it.value();
+
+            // ✅ hash password only
+            if (key == "password") {
+                val = sha256(val);
+            }
+
             values += "'" + val + "',";
         }
     }
@@ -547,6 +599,15 @@ http_conn::HTTP_CODE http_conn::handle_post_content(char * text){
 
 // PUT METHOD
 http_conn::HTTP_CODE http_conn::handle_put_content(char* text){
+
+    // protect API
+    if (!UserDAO::validate_token(token)) {
+        json_res = "{\"error\":\"unauthorized\"}";
+        Logger::get_instance()->log(ERROR, "unauthorized");
+        return FORBIDDEN_REQUEST;
+    }
+
+
     // debug
     std::string body(text);
     std::cout << "PUT Body: " << body << std::endl;
@@ -602,6 +663,55 @@ http_conn::HTTP_CODE http_conn::handle_put_content(char* text){
         return UPDATE_RESOURCE;
     }
 }
+
+// login function
+http_conn::HTTP_CODE http_conn::handle_login(char* text) {
+
+    std::string body(text);
+    Logger::get_instance()->log(INFO, "POST /api/login body=" + body);
+
+    json j = json::parse(body);
+
+    if (!j.contains("email") || !j.contains("password")) {
+        json_res = "{\"error\":\"missing fields\"}";
+        Logger::get_instance()->log(ERROR, json_res);
+        return BAD_REQUEST;
+    }
+
+    std::string email = j["email"];
+    std::string password = j["password"];
+
+    json res = UserService::login(email, password);
+    json_res = res.dump();
+
+    if (res.contains("error")) {
+        Logger::get_instance()->log(ERROR, res["error"]);
+        return BAD_REQUEST;
+    }
+
+    return GET_RESOURCE;  // return JSON
+}
+
+
+
+http_conn::HTTP_CODE http_conn::handle_logout() {
+
+    if (token.empty()) {
+        json_res = "{\"error\":\"no token\"}";
+        Logger::get_instance()->log(ERROR, "no token");
+        return BAD_REQUEST;
+    }
+
+    if (!UserDAO::delete_session(token)) {
+        json_res = "{\"error\":\"logout failed\"}";
+        Logger::get_instance()->log(ERROR, "logout failed.");
+        return INTERNAL_ERROR;
+    }
+
+    json_res = "{\"message\":\"logout success\"}";
+    return DELETE_RESOURCE;
+}
+
 
 
 // host state machine
@@ -834,7 +944,7 @@ bool http_conn::process_write(HTTP_CODE ret) {
             break;
         case BAD_REQUEST:
             add_status_line(400, error_400_title);
-            if (apireq && !json_res.empty()) {
+            if (apireq  == 1 && !json_res.empty()) {
                 add_headers(json_res.size(), "application/json");
                 if (!add_content(json_res.c_str())) {
                     return false;
