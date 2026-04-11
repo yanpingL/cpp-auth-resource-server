@@ -65,7 +65,7 @@ void connection_pool::init(std::string url, std::string user,
 MYSQL* connection_pool::get_connection() {
     MYSQL* conn = NULL;
 
-    reserve.wait();     // wait if no available connection
+    reserve.wait();     // decrement the value by 1
     lock.lock();
     if (conn_list.empty()) {
         lock.unlock();
@@ -92,7 +92,7 @@ bool connection_pool::release_connection(MYSQL* conn) {
     cur_conn--;
 
     lock.unlock();
-    reserve.post();
+    reserve.post(); // add the value by 1
 
     return true;
 }

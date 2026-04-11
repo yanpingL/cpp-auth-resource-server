@@ -53,7 +53,6 @@ void addfd(int epollfd, int fd, bool one_shot) {
     ├── fd1 → stored event config
     ├── fd2 → stored event config
     ├── fd3 → stored event config
-    
     */
     epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &event);
     // set the fd nonblok
@@ -116,6 +115,7 @@ void http_conn::init(int sockfd, const sockaddr_in &addr){
 
     init();
 } 
+
 
 // initialize other infos
 void http_conn::init(){
@@ -244,40 +244,47 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char * text){
     char *method = text; // GET
 
     // need to update to other METHODS
-    if (strcasecmp(method, "GET") == 0){
-        m_method = GET;
-    } else if (strcasecmp(method, "POST") == 0){
+    if (strcasecmp(method, "POST") == 0){
         m_method = POST;
     } else if (strcasecmp(method, "PUT") == 0){
         m_method = PUT;
+    } else if (strcasecmp(method, "GET") == 0){
+        m_method = GET;
     } else if (strcasecmp(method, "DELETE") == 0){
         m_method = DELETE;
     } 
 
     // check the HTTP version: /index.html HTTP/1.1
-    // if the m_version points to null, error
+    // if the m_version points to null, return bad request
+    // result: /index.html\0hTTP/1.1
     m_version = strpbrk(m_url, " \t");
     if (!m_version){
         return BAD_REQUEST;
     } 
-
-    // /index.html\0hTTP/1.1
     *m_version++ = '\0';
     if (strcasecmp( m_version, "HTTP/1.1") != 0 ) {
         return BAD_REQUEST;
     }
 
-    // check if the request is /api request
-    // GET /api/user?id=x HTTP/1.1 
-    if(strncmp(m_url, "/api/user", 9) == 0){
-        apireq = 1;
-    }
+    /*
+    check the request type
+    0. GET /api/user?id=x HTTP/1.1 
+    1. POST /api/login or /api/logout
+    2. GET /api/resources 
+    */
+    // request for user account
     if(strncmp(m_url, "/api/login", 10) == 0){
         apireq = 2;
     }
     if(strncmp(m_url, "/api/logout", 11) == 0){
         apireq = 3;
     }
+
+    // request to the user owned resources
+    if(strncmp(m_url, "/api/resources", 9) == 0){
+        apireq = 1;
+    }
+
 
     /**
      * http://192.168.110.129:10000/index.html
@@ -296,111 +303,6 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char * text){
     m_check_stat = CHECK_STATE_HEADER;
     return NO_REQUEST;
 }
-
-
-//Implement GET/api/user (USING nlohmann/json)
-//GET/api/user?id=123 HTTP/1.1
-// helper function used in handle_get_user()
-void http_conn::parse_query(char* query_string, std::string& key, std::string& value) {
-    char* equal = strchr(query_string, '=');
-    if (equal) {
-        *equal = '\0';
-        key = query_string;
-        value = equal + 1;
-    }
-}
-
-
-// need to complete the last half of the parse_request_line
-http_conn::HTTP_CODE http_conn::handle_get_user(){
-
-    // protect API
-    if (!UserDAO::validate_token(token)) {
-        json_res = "{\"error\":\"unauthorized\"}";
-        Logger::get_instance()->log(ERROR, "unauthorized");
-        return FORBIDDEN_REQUEST;
-    }
-
-    //parse query 
-    char* query = strchr(m_url, '?');
-    std::string id = "unkonw";
-
-    if (query){
-        *query++ = '\0';
-        std::string key, value;
-        parse_query(query, key, value);
-
-        if (key != "id") {
-            json_res = "{\"error\":\"invalid param\"}";
-            Logger::get_instance()->log(ERROR, "invalid param");
-            return BAD_REQUEST;
-        } else {
-            id = value;
-        }
-    }
-
-    // validate the request ID
-    if (!std::all_of(id.begin(), id.end(), ::isdigit)) {
-        json_res = "{\"error\":\"invalid id\"}";
-        Logger::get_instance()->log(ERROR, "Invalid ID");
-        return BAD_REQUEST;
-    }
-
-    // UserService layer to handle the service request
-    // the user_dao called inside the UserService handle the data layer
-    Logger::get_instance()->log(INFO, "GET /api/user?id=" + id);
-    json res = UserService::get_user(std::atoi(id.c_str()));
-
-    json_res = res.dump();
-    if (res.contains("error")){
-        return BAD_REQUEST;
-    } else {
-        return GET_RESOURCE;
-    }
-
-    
-}
-
-
-/*
-DELETE /api/user?id=1 HTTP/1.1
-*/
-http_conn::HTTP_CODE http_conn::handle_delete_user(){
-
-    // protect API
-    if (!UserDAO::validate_token(token)) {
-        json_res = "{\"error\":\"unauthorized\"}";
-        Logger::get_instance()->log(ERROR, "unauthorized");
-        return FORBIDDEN_REQUEST;
-    }
-
-
-    char* query = strchr(m_url, '?');
-    std::string key, value;
-
-    if (query){
-        *query++ = '\0';
-        parse_query(query, key, value);
-    }
-
-    // validate id
-    if (key != "id" || !std::all_of(value.begin(), value.end(), ::isdigit)){
-        json_res = "{\"error\":\"invalid id\"}";
-        return BAD_REQUEST;
-    }
-
-    Logger::get_instance()->log(INFO, "DELETE /api/user?id=" + value);
-    json res = UserService::delete_user(atoi(value.c_str()));
-    json_res = res.dump();
-
-    if (res.contains("error")){
-        return BAD_REQUEST;
-    } else {
-        return DELETE_RESOURCE;
-    }
-    
-}
-
 
 // parse request header
 /*
@@ -489,7 +391,6 @@ http_conn::HTTP_CODE http_conn::parse_headers(char * text){
         text += strspn(text, " \t");
     
         std::string auth = text;
-    
         // expect: Bearer xxx
         if (auth.find("Bearer ") == 0) {
             token = auth.substr(7);
@@ -528,9 +429,110 @@ http_conn::HTTP_CODE http_conn::parse_content(char * text){
 
 
 /*
-1. Still need to handlle when the post resource already exist
-2. 
+Request handle function ----------------------------------------------
 */
+
+//Implement GET/api/user (USING nlohmann/json)
+//GET/api/user?id=123 HTTP/1.1
+// helper function used in handle_get_user()
+void http_conn::parse_query(char* query_string, std::string& key, std::string& value) {
+    char* equal = strchr(query_string, '=');
+    if (equal) {
+        *equal = '\0';
+        key = query_string;
+        value = equal + 1;
+    }
+}
+
+// need to complete the last half of the parse_request_line
+http_conn::HTTP_CODE http_conn::handle_get_user(){
+
+    // protect API
+    if (!UserDAO::validate_token(token)) {
+        json_res = "{\"error\":\"unauthorized\"}";
+        Logger::get_instance()->log(ERROR, "unauthorized");
+        return FORBIDDEN_REQUEST;
+    }
+
+    //parse query 
+    char* query = strchr(m_url, '?');
+    std::string id = "unkonw";
+
+    if (query){
+        *query++ = '\0';
+        std::string key, value;
+        parse_query(query, key, value);
+
+        if (key != "id") {
+            json_res = "{\"error\":\"invalid param\"}";
+            Logger::get_instance()->log(ERROR, "invalid param");
+            return BAD_REQUEST;
+        } else {
+            id = value;
+        }
+    }
+
+    // validate the request ID
+    if (!std::all_of(id.begin(), id.end(), ::isdigit)) {
+        json_res = "{\"error\":\"invalid id\"}";
+        Logger::get_instance()->log(ERROR, "Invalid ID");
+        return BAD_REQUEST;
+    }
+
+    // UserService layer to handle the service request
+    // the user_dao called inside the UserService handle the data layer
+    Logger::get_instance()->log(INFO, "GET /api/user?id=" + id);
+    json res = UserService::get_user(std::atoi(id.c_str()));
+
+    json_res = res.dump();
+    if (res.contains("error")){
+        return BAD_REQUEST;
+    } else {
+        return GET_RESOURCE;
+    }
+    
+}
+
+
+/*
+request format: DELETE /api/user?id=1 HTTP/1.1
+*/
+http_conn::HTTP_CODE http_conn::handle_delete_user(){
+
+    // protect API
+    if (!UserDAO::validate_token(token)) {
+        json_res = "{\"error\":\"unauthorized\"}";
+        Logger::get_instance()->log(ERROR, "unauthorized");
+        return FORBIDDEN_REQUEST;
+    }
+
+    char* query = strchr(m_url, '?');
+    std::string key, value;
+
+    if (query){
+        *query++ = '\0';
+        parse_query(query, key, value);
+    }
+
+    // validate id
+    if (key != "id" || !std::all_of(value.begin(), value.end(), ::isdigit)){
+        json_res = "{\"error\":\"invalid id\"}";
+        return BAD_REQUEST;
+    }
+
+    Logger::get_instance()->log(INFO, "DELETE /api/user?id=" + value);
+    json res = UserService::delete_user(atoi(value.c_str()));
+    json_res = res.dump();
+
+    if (res.contains("error")){
+        return BAD_REQUEST;
+    } else {
+        return DELETE_RESOURCE;
+    }
+    
+}
+
+
 http_conn::HTTP_CODE http_conn::handle_post_content(char * text){
     
     // extract body
@@ -584,8 +586,6 @@ http_conn::HTTP_CODE http_conn::handle_post_content(char * text){
                         "(" + cols + ") values (" + values + ")";
     Logger::get_instance()->log(DEBUG, "SQL: " + sql);
 
-
-    
     json res = UserService::create_user(sql);
     json_res = res.dump();
     if (res.contains("error")){
@@ -607,7 +607,6 @@ http_conn::HTTP_CODE http_conn::handle_put_content(char* text){
         return FORBIDDEN_REQUEST;
     }
 
-
     // debug
     std::string body(text);
     std::cout << "PUT Body: " << body << std::endl;
@@ -621,7 +620,6 @@ http_conn::HTTP_CODE http_conn::handle_put_content(char* text){
         return BAD_REQUEST;
     }
     int id = j["id"];
-
 
     // 2. build SET clause
     std::string set_clause;
@@ -653,7 +651,6 @@ http_conn::HTTP_CODE http_conn::handle_put_content(char* text){
                         + set_clause + " WHERE id=" + std::to_string(id);
     Logger::get_instance()->log(DEBUG, "SQL: " + sql);
     
-    
     json res = UserService::update_user(sql);
     json_res = res.dump();
 
@@ -663,6 +660,7 @@ http_conn::HTTP_CODE http_conn::handle_put_content(char* text){
         return UPDATE_RESOURCE;
     }
 }
+
 
 // login function
 http_conn::HTTP_CODE http_conn::handle_login(char* text) {
@@ -926,11 +924,6 @@ bool http_conn::add_content( const char* content )
 }
 
 
-// bool http_conn::add_json_type(){
-//     return add_response("Content-Type: application/%s\r\n", "json");
-// }
-
-
 // write the response to the write buffer
 bool http_conn::process_write(HTTP_CODE ret) {
     switch (ret)
@@ -1020,6 +1013,7 @@ bool http_conn::process_write(HTTP_CODE ret) {
 }
 
 
+
 // Again, this function is called in the MAIN THREAD, by the corresponding http_conn object
 // write HTTP response to the m_sockfd
 bool http_conn::write(){
@@ -1040,8 +1034,6 @@ bool http_conn::write(){
     while(1) {
         // wirte distributely
         temp = writev(m_sockfd, m_iv, m_iv_count);
-        /* modify the m_iv[].iov_base & m_iv[1].iov_len
-        */
 
         if (temp <= -1) {
             // in this case, the socket buffer is full, writev() is non-blocking 

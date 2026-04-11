@@ -19,6 +19,7 @@ RUN apt-get update -o Acquire::Retries=5 && \
       manpages-dev \
       nlohmann-json3-dev \
       libmysqlclient-dev \ 
+      libhiredis-dev \
     && yes | unminimize \
     && rm -rf /var/lib/apt/lists/*
 

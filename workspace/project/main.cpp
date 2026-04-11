@@ -17,6 +17,7 @@
 #include "http_conn.h"
 #include "connection_pool.h"
 #include "logger.h"
+#include "redis_client.h"
 
 
 
@@ -81,9 +82,11 @@ int main(int argc, char* argv[]){
         10   // pool size
     );
 
+    // initalise the RedisClient instance
+    RedisClient::get_instance()->connect("sys-redis", 6379);
+    
     // creat the logger instance and initalize it
     Logger::get_instance()->init("server.log");
-
 
     // create an array to store all of the client infos, connection info
     http_conn * users = new http_conn[MAX_FD];
@@ -147,14 +150,12 @@ int main(int argc, char* argv[]){
                 if(http_conn::m_user_count >= MAX_FD) {
                     // current connection number is full
                     // send info to client about server busy
-
                     close(connfd);
                     continue;
                 }
 
                 // initialize the new client data and add to array (connection/task)
                 users[connfd].init(connfd, client_address);
-
 
             } else if (events[i].events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR )){
                 // client disconnect with mistake or error

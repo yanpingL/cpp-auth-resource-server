@@ -92,7 +92,7 @@ public:
         sem_destroy(&m_sem);
     }
 
-    // wait the signal to decrement the value of sem
+    //the signal to decrement the value of sem
     bool wait(){
         return sem_wait(&m_sem) == 0;
     }

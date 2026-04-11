@@ -111,6 +111,7 @@ bool threadpool<T>::append(T *request){
 template<typename T>
 void* threadpool<T>::worker(void * arg) {
     // static function cannot use the non-static member
+    // It points to an existing threadpool object
     threadpool *pool = (threadpool *) arg;
     pool->run();
     return pool;
@@ -122,7 +123,7 @@ void threadpool<T>::run(){
     while(!m_stop) {
         // get a task from the request queue
         // have sem value, --1
-        // no value, block until value > 0
+        // no value, block until value > 0, then any one of blocked thread will be woken up
         m_queuestat.wait();
         m_queuelocker.lock();
         if(m_workqueue.empty()) {

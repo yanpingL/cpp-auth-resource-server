@@ -1,6 +1,8 @@
 #include "user_dao.h"
 #include "connection_pool.h"
 #include "logger.h"
+#include "redis_client.h"
+
 #include <mysql/mysql.h>
 #include <iostream>
 
@@ -195,6 +197,15 @@ std::optional<User> UserDAO::get_user_by_email(const std::string& email){
 
 bool UserDAO::validate_token(const std::string& token) {
 
+    // Try Redis first
+    std::string user_id =
+        RedisClient::get_instance()->get(token);
+    
+    if (!user_id.empty()){
+        return true;  // fast path
+    }
+
+    // Redis miss -> fallback to DB
     connection_pool* pool = connection_pool::get_instance();
     MYSQL* conn = pool->get_connection();
 
@@ -204,7 +215,9 @@ bool UserDAO::validate_token(const std::string& token) {
         return false;
     }
 
-    std::string sql = "SELECT user_id FROM sessions WHERE token='" + token + "'";
+    std::string sql = "SELECT user_id FROM sessions WHERE token='" + token 
+                        + "' AND expires_at > NOW()";
+
     Logger::get_instance()->log(DEBUG, "SQL: " + sql);
 
     if (mysql_query(conn, sql.c_str())) {
@@ -224,6 +237,12 @@ bool UserDAO::validate_token(const std::string& token) {
 
     MYSQL_ROW row = mysql_fetch_row(result);
 
+    // Cache it back to Redis
+    if (row != nullptr){
+        std::string uid = row[0];
+        RedisClient::get_instance()->set(token, uid, 3600);
+    }
+
     mysql_free_result(result);
     pool->release_connection(conn);
 
@@ -233,7 +252,10 @@ bool UserDAO::validate_token(const std::string& token) {
 
 
 bool UserDAO::delete_session(const std::string& token) {
+    // delete from Redis
+    RedisClient::get_instance()->del(token);
 
+    // delete from DB
     connection_pool* pool = connection_pool::get_instance();
     MYSQL* conn = pool->get_connection();
 

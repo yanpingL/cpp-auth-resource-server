@@ -1,25 +1,40 @@
 services:
-  web-dev: #service name
-    image: webserver-web-dev:latest #blueprint of the env
-    build:
-      context: .
-      network: host   # IMPORTANT: avoids DNS/VPN build issues
-    container_name: sys-web-dev #instance of the image 
+  web1:
+    image: webserver-web-dev:latest
+    container_name: sys-web-1
     volumes:
       - ./workspace:/workspace
     depends_on:
-      - mysql   # wait for mysql to launch
+      - mysql
+      - redis
     ports:
-      - "8080:8080"
-    dns:
-      - 8.8.8.8
-      - 1.1.1.1
+      - "8081:8080"
     stdin_open: true
     tty: true
-    cap_add:
-      - SYS_PTRACE
-    security_opt:
-      - seccomp=unconfined
+  
+  web2:
+    image: webserver-web-dev:latest
+    container_name: sys-web-2
+    volumes:
+      - ./workspace:/workspace
+    depends_on:
+      - mysql
+      - redis
+    ports:
+      - "8082:8080"
+    stdin_open: true
+    tty: true
+
+  nginx:
+    image: nginx:latest
+    container_name: sys-nginx
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+    depends_on:
+      - web1
+      - web2
   
   mysql: #  Newly added database service
     image: mysql:8.0
@@ -34,6 +49,13 @@ services:
       - "3306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
+  
+  redis: # Newly added Redis service
+    image: redis:7
+    container_name: sys-redis
+    ports: 
+      - "6379:6379"
+
 
 volumes:
   mysql_data:
