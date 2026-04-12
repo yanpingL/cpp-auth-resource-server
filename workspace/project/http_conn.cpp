@@ -279,9 +279,12 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char * text){
     if(strncmp(m_url, "/api/logout", 11) == 0){
         apireq = 3;
     }
+    if(strncmp(m_url, "/api/register", 13) == 0){
+        apireq = 4;
+    }
 
     // request to the user owned resources
-    if(strncmp(m_url, "/api/resources", 9) == 0){
+    if(strncmp(m_url, "/api/resources", 14) == 0){
         apireq = 1;
     }
 
@@ -339,27 +342,34 @@ http_conn::HTTP_CODE http_conn::parse_headers(char * text){
 
         // DELETE /api/user?id=... usually has no body.
         // Execute handler once headers are fully parsed.
+        // All query with type 1 need to validate the user token
         if (apireq == 1){
             if (m_method == DELETE){
-                return handle_delete_user();
+                // return handle_delete_user();
+                return handle_delete_resource();
             } else if(m_method == GET){
-                return handle_get_user();
+                // return handle_get_user();
+                return handle_get_resources();
             } 
         }
-        if (apireq == 2 && m_method == POST){
+        if (m_method == POST && (apireq == 2 || apireq == 3 || apireq == 4)){
             m_check_stat = CHECK_STATE_CONTENT;
             return NO_REQUEST;
         }
-        if (apireq == 3 && m_method == POST){
-            m_check_stat = CHECK_STATE_CONTENT;
-            return NO_REQUEST;
-        }
+        // if (apireq == 3 && m_method == POST){
+        //     m_check_stat = CHECK_STATE_CONTENT;
+        //     return NO_REQUEST;
+        // }
+        // if (apireq == 4 && m_method == POST){
+        //     m_check_stat = CHECK_STATE_CONTENT;
+        //     return NO_REQUEST;
+        // }
 
         
-        if (m_content_length != 0 ) {
-            m_check_stat = CHECK_STATE_CONTENT;
-            return NO_REQUEST; // request incomplete, still need to parse the body
-        }
+        // if (m_content_length != 0 ) {
+        //     m_check_stat = CHECK_STATE_CONTENT;
+        //     return NO_REQUEST; // request incomplete, still need to parse the body
+        // }
         
         // file request
         return GET_REQUEST;
@@ -412,15 +422,22 @@ http_conn::HTTP_CODE http_conn::parse_content(char * text){
         text[ m_content_length ] = '\0';
 
         // need to parse the content with POST method
-        if (m_method == POST && apireq == 1){
-            return handle_post_content(text);
-        } else if (m_method == PUT){
-            // only parse the full body content
-            return handle_put_content(text);
-        }  else if (m_method == POST && apireq == 2){
+        if (apireq == 1){
+            if (m_method == GET){
+                // ===========
+            } else if (m_method == POST){
+                return handle_post_resource(text);
+            } else if(m_method == PUT){ 
+                return handle_put_resource(text);
+            } else if (m_method == DELETE){
+                return handle_delete_resource(text);
+            }
+        } else if (m_method == POST && apireq == 2){
             return handle_login(text);
         } else if (m_method == POST && apireq == 3){
             return handle_logout();
+        } else if (m_method == POST && apireq == 4){
+            return handle_register(text);
         }
         return GET_REQUEST;
     }
@@ -434,7 +451,7 @@ Request handle function ----------------------------------------------
 
 //Implement GET/api/user (USING nlohmann/json)
 //GET/api/user?id=123 HTTP/1.1
-// helper function used in handle_get_user()
+// helper function used in handle_get_resource()
 void http_conn::parse_query(char* query_string, std::string& key, std::string& value) {
     char* equal = strchr(query_string, '=');
     if (equal) {
@@ -445,10 +462,15 @@ void http_conn::parse_query(char* query_string, std::string& key, std::string& v
 }
 
 // need to complete the last half of the parse_request_line
-http_conn::HTTP_CODE http_conn::handle_get_user(){
+/*===================
+should be invalid, change to get_resource
+========================
+*/
+http_conn::HTTP_CODE http_conn::handle_get_resources(){
 
     // protect API
-    if (!UserDAO::validate_token(token)) {
+    int user_id = UserDAO::get_user_id_from_token(token);
+    if (user_id == nullopt) {
         json_res = "{\"error\":\"unauthorized\"}";
         Logger::get_instance()->log(ERROR, "unauthorized");
         return FORBIDDEN_REQUEST;
@@ -481,8 +503,8 @@ http_conn::HTTP_CODE http_conn::handle_get_user(){
 
     // UserService layer to handle the service request
     // the user_dao called inside the UserService handle the data layer
-    Logger::get_instance()->log(INFO, "GET /api/user?id=" + id);
-    json res = UserService::get_user(std::atoi(id.c_str()));
+    Logger::get_instance()->log(INFO, "GET /api/resources");
+    json res = ResourcesService::get_resources(user_id);
 
     json_res = res.dump();
     if (res.contains("error")){
@@ -496,11 +518,14 @@ http_conn::HTTP_CODE http_conn::handle_get_user(){
 
 /*
 request format: DELETE /api/user?id=1 HTTP/1.1
+shoudl be delete resource
 */
-http_conn::HTTP_CODE http_conn::handle_delete_user(){
+
+http_conn::HTTP_CODE http_conn::handle_delete_resource(){
 
     // protect API
-    if (!UserDAO::validate_token(token)) {
+    int user_id = UserDAO::get_user_id_from_token(token);
+    if (user_id == nullopt) {
         json_res = "{\"error\":\"unauthorized\"}";
         Logger::get_instance()->log(ERROR, "unauthorized");
         return FORBIDDEN_REQUEST;
@@ -520,8 +545,8 @@ http_conn::HTTP_CODE http_conn::handle_delete_user(){
         return BAD_REQUEST;
     }
 
-    Logger::get_instance()->log(INFO, "DELETE /api/user?id=" + value);
-    json res = UserService::delete_user(atoi(value.c_str()));
+    Logger::get_instance()->log(INFO, "DELETE /api/resource?id=" + value);
+    json res = ResourceService::delete_resource(user_id, atoi(value.c_str()));
     json_res = res.dump();
 
     if (res.contains("error")){
@@ -529,7 +554,6 @@ http_conn::HTTP_CODE http_conn::handle_delete_user(){
     } else {
         return DELETE_RESOURCE;
     }
-    
 }
 
 
@@ -691,7 +715,7 @@ http_conn::HTTP_CODE http_conn::handle_login(char* text) {
 }
 
 
-
+// logout
 http_conn::HTTP_CODE http_conn::handle_logout() {
 
     if (token.empty()) {
@@ -710,6 +734,66 @@ http_conn::HTTP_CODE http_conn::handle_logout() {
     return DELETE_RESOURCE;
 }
 
+
+// register
+http_conn::HTTP_CODE http_conn::handle_register(char * text){
+        // extract body
+        std::string body(text);
+        // debug
+        std::cout << "Body: " << body << std::endl;
+        Logger::get_instance()->log(INFO, "POST /api/register body=" + body);
+    
+        // next step: parse JSON
+        json j = json::parse(body);
+    
+        // validate id
+        if (!j.contains("id") || !j["id"].is_number_integer()){
+            json_res = "{\"error\":\"invalid id\"}";
+            return BAD_REQUEST;
+        }
+        int id = j["id"];
+        
+        // add the user resource back to db
+        std::set<std::string> allowed = {"id", "name", "email", "password"};
+        std::string cols;
+        std::string values;
+    
+        for (auto it = j.begin(); it != j.end(); ++it){
+            std::string key = it.key();
+    
+            // whitelist
+            if(!allowed.count(key)) continue;
+    
+            cols += key + ",";
+            // number 
+            if(it.value().is_number()){
+                values += it.value().dump() + ",";
+            // string
+            } else if (it.value().is_string()){
+                std::string val = it.value();
+                //hash password only
+                if (key == "password") {
+                    val = sha256(val);
+                }
+                values += "'" + val + "',";
+            }
+        }
+    
+        if(!cols.empty()) cols.pop_back();
+        if(!values.empty()) values.pop_back();
+    
+        std::string sql =  std::string("INSERT INTO users ") + 
+                            "(" + cols + ") values (" + values + ")";
+        Logger::get_instance()->log(DEBUG, "SQL: " + sql);
+    
+        json res = UserService::create_user(sql);
+        json_res = res.dump();
+        if (res.contains("error")){
+            return BAD_REQUEST;
+        } else {
+            return ADD_RESOURCE;
+        }
+}
 
 
 // host state machine

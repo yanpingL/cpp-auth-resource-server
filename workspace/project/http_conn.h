@@ -94,7 +94,7 @@ private:
     LINE_STATUS parse_line(); // parse one line, check based on \r\n
 
     // ===== RESTful API =====
-    HTTP_CODE handle_get_user();
+    HTTP_CODE handle_get_resources();
     void parse_query(char* query_string, std::string& key, std::string& value);
     bool add_json_type();
 
@@ -103,9 +103,11 @@ private:
     // helper function for PUT method
     HTTP_CODE handle_put_content(char * text);
     // helper fuction for DELETE method
-    HTTP_CODE handle_delete_user();
+    HTTP_CODE handle_delete_resource();
+    
     HTTP_CODE handle_login(char* text);
     HTTP_CODE handle_logout();
+    HTTP_CODE handle_register(char* text);
 
 
 
