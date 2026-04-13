@@ -1,0 +1,776 @@
+[2026-04-10 07:29:06] [DEBUG] HTTP line: DELETE /api/user?id=2 HTTP/1.1
+[2026-04-10 07:29:06] [DEBUG] HTTP line: Host: localhost:8080
+[2026-04-10 07:29:06] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-10 07:29:06] [DEBUG] HTTP line: Accept: */*
+[2026-04-10 07:29:06] [DEBUG] HTTP line: 
+[2026-04-10 07:29:06] [INFO] DELETE /api/user?id=2
+[2026-04-10 07:29:06] [DEBUG] SQL: DELETE FROM users WHERE id=2
+[2026-04-10 07:30:47] [DEBUG] HTTP line: GET /api/user?id=1 HTTP/1.1
+[2026-04-10 07:30:47] [DEBUG] HTTP line: Host: localhost:8080
+[2026-04-10 07:30:47] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-10 07:30:47] [DEBUG] HTTP line: Accept: */*
+[2026-04-10 07:30:47] [DEBUG] HTTP line: Connection: keep-alive
+[2026-04-10 07:30:47] [DEBUG] HTTP line: 
+[2026-04-10 07:30:47] [INFO] GET /api/user?id=1
+[2026-04-10 07:30:47] [DEBUG] SQL: SELECT id, name, email FROM users WHERE id=1
+[2026-04-10 07:36:16] [DEBUG] HTTP line: POST /api/login HTTP/1.1
+[2026-04-10 07:36:16] [DEBUG] HTTP line: Host: localhost:8080
+[2026-04-10 07:36:16] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-10 07:36:16] [DEBUG] HTTP line: Accept: */*
+[2026-04-10 07:36:16] [DEBUG] HTTP line: Content-Type: application/json
+[2026-04-10 07:36:16] [DEBUG] HTTP line: Connection: keep-alive
+[2026-04-10 07:36:16] [DEBUG] HTTP line: Content-Length: 44
+[2026-04-10 07:36:16] [DEBUG] HTTP line: 
+[2026-04-10 07:41:26] [DEBUG] HTTP line: POST /api/login HTTP/1.1
+[2026-04-10 07:41:26] [DEBUG] HTTP line: Host: localhost:8080
+[2026-04-10 07:41:26] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-10 07:41:26] [DEBUG] HTTP line: Accept: */*
+[2026-04-10 07:41:26] [DEBUG] HTTP line: Content-Type: application/json
+[2026-04-10 07:41:26] [DEBUG] HTTP line: Connection: keep-alive
+[2026-04-10 07:41:26] [DEBUG] HTTP line: Content-Length: 44
+[2026-04-10 07:41:26] [DEBUG] HTTP line: 
+[2026-04-10 07:42:28] [DEBUG] HTTP line: POST /api/login HTTP/1.1
+[2026-04-10 07:42:28] [DEBUG] HTTP line: Host: localhost:8080
+[2026-04-10 07:42:28] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-10 07:42:28] [DEBUG] HTTP line: Accept: */*
+[2026-04-10 07:42:28] [DEBUG] HTTP line: Content-Type: application/json
+[2026-04-10 07:42:28] [DEBUG] HTTP line: Connection: keep-alive
+[2026-04-10 07:42:28] [DEBUG] HTTP line: Content-Length: 44
+[2026-04-10 07:42:28] [DEBUG] HTTP line: 
+[2026-04-10 07:48:01] [DEBUG] HTTP line: POST /api/login HTTP/1.1
+[2026-04-10 07:48:01] [DEBUG] HTTP line: Host: localhost:8080
+[2026-04-10 07:48:01] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-10 07:48:01] [DEBUG] HTTP line: Accept: */*
+[2026-04-10 07:48:01] [DEBUG] HTTP line: Content-Type: application/json
+[2026-04-10 07:48:01] [DEBUG] HTTP line: Connection: keep-alive
+[2026-04-10 07:48:01] [DEBUG] HTTP line: Content-Length: 44
+[2026-04-10 07:48:01] [DEBUG] HTTP line: 
+[2026-04-10 07:48:01] [DEBUG] HTTP line: {"email":"bob123@test.com","password":"123"}
+[2026-04-10 07:48:01] [INFO] POST /api/login body={"email":"bob123@test.com","password":"123"}
+[2026-04-10 07:48:01] [DEBUG] SQL: SELECT id, name, email, password FROM users WHERE email='bob123@test.com'
+[2026-04-10 10:08:10] [DEBUG] HTTP line: POST /api/login HTTP/1.1
+[2026-04-10 10:08:10] [DEBUG] HTTP line: Host: localhost:8080
+[2026-04-10 10:08:10] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-10 10:08:10] [DEBUG] HTTP line: Accept: */*
+[2026-04-10 10:08:10] [DEBUG] HTTP line: Content-Type: application/json
+[2026-04-10 10:08:10] [DEBUG] HTTP line: Content-Length: 45
+[2026-04-10 10:08:10] [DEBUG] HTTP line: 
+[2026-04-10 10:08:10] [DEBUG] HTTP line: {"email":"alice@test.com","password":"hash1"}
+[2026-04-10 10:08:10] [INFO] POST /api/login body={"email":"alice@test.com","password":"hash1"}
+[2026-04-10 10:08:10] [DEBUG] SQL: SELECT id, name, email, password FROM users WHERE email='alice@test.com'
+[2026-04-10 10:08:10] [ERROR] wrong password
+[2026-04-10 10:13:20] [DEBUG] HTTP line: POST /api/login HTTP/1.1
+[2026-04-10 10:13:20] [DEBUG] HTTP line: Host: localhost:8080
+[2026-04-10 10:13:20] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-10 10:13:20] [DEBUG] HTTP line: Accept: */*
+[2026-04-10 10:13:20] [DEBUG] HTTP line: Content-Type: application/json
+[2026-04-10 10:13:20] [DEBUG] HTTP line: Content-Length: 45
+[2026-04-10 10:13:20] [DEBUG] HTTP line: 
+[2026-04-10 10:13:20] [DEBUG] HTTP line: {"email":"alice@test.com","password":"hash1"}
+[2026-04-10 10:13:20] [INFO] POST /api/login body={"email":"alice@test.com","password":"hash1"}
+[2026-04-10 10:13:20] [DEBUG] SQL: SELECT id, name, email, password FROM users WHERE email='alice@test.com'
+[2026-04-10 10:13:20] [ERROR] wrong password
+[2026-04-10 10:13:45] [DEBUG] HTTP line: POST /api/login HTTP/1.1
+[2026-04-10 10:13:45] [DEBUG] HTTP line: Host: localhost:8080
+[2026-04-10 10:13:45] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-10 10:13:45] [DEBUG] HTTP line: Accept: */*
+[2026-04-10 10:13:45] [DEBUG] HTTP line: Content-Type: application/json
+[2026-04-10 10:13:45] [DEBUG] HTTP line: Content-Length: 45
+[2026-04-10 10:13:45] [DEBUG] HTTP line: 
+[2026-04-10 10:13:45] [DEBUG] HTTP line: {"email":"alice@test.com","password":"hash1"}
+[2026-04-10 10:13:45] [INFO] POST /api/login body={"email":"alice@test.com","password":"hash1"}
+[2026-04-10 10:13:45] [DEBUG] SQL: SELECT id, name, email, password FROM users WHERE email='alice@test.com'
+[2026-04-10 10:13:45] [ERROR] wrong password
+[2026-04-10 10:14:05] [DEBUG] HTTP line: POST /api/login HTTP/1.1
+[2026-04-10 10:14:05] [DEBUG] HTTP line: Host: localhost:8080
+[2026-04-10 10:14:05] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-10 10:14:05] [DEBUG] HTTP line: Accept: */*
+[2026-04-10 10:14:05] [DEBUG] HTTP line: Content-Type: application/json
+[2026-04-10 10:14:05] [DEBUG] HTTP line: Content-Length: 45
+[2026-04-10 10:14:05] [DEBUG] HTTP line: 
+[2026-04-10 10:14:05] [DEBUG] HTTP line: {"email":"alice@test.com","password":"hash1"}
+[2026-04-10 10:14:05] [INFO] POST /api/login body={"email":"alice@test.com","password":"hash1"}
+[2026-04-10 10:14:05] [DEBUG] SQL: SELECT id, name, email, password FROM users WHERE email='alice@test.com'
+[2026-04-10 10:14:05] [ERROR] wrong password
+[2026-04-10 10:16:20] [DEBUG] HTTP line: POST /api/user HTTP/1.1
+[2026-04-10 10:16:20] [DEBUG] HTTP line: Host: localhost:8080
+[2026-04-10 10:16:20] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-10 10:16:20] [DEBUG] HTTP line: Accept: */*
+[2026-04-10 10:16:20] [DEBUG] HTTP line: Content-Type: application/json
+[2026-04-10 10:16:20] [DEBUG] HTTP line: Content-Length: 67
+[2026-04-10 10:16:20] [DEBUG] HTTP line: 
+[2026-04-10 10:16:20] [DEBUG] HTTP line: {"id":1,"name":"Alice","email":"alice@test.com","password":"hash1"}
+[2026-04-10 10:16:20] [INFO] POST /api/user body={"id":1,"name":"Alice","email":"alice@test.com","password":"hash1"}
+[2026-04-10 10:16:20] [DEBUG] SQL: INSERT INTO users (id,name,email,password) values (1,'Alice','alice@test.com','af316ecb91a8ee7ae99210702b2d4758f3cdde3bf61e3d8e787d74681f9a6e')
+[2026-04-10 10:16:55] [DEBUG] HTTP line: POST /api/user HTTP/1.1
+[2026-04-10 10:16:55] [DEBUG] HTTP line: Host: localhost:8080
+[2026-04-10 10:16:55] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-10 10:16:55] [DEBUG] HTTP line: Accept: */*
+[2026-04-10 10:16:55] [DEBUG] HTTP line: Content-Type: application/json
+[2026-04-10 10:16:55] [DEBUG] HTTP line: Content-Length: 63
+[2026-04-10 10:16:55] [DEBUG] HTTP line: 
+[2026-04-10 10:16:55] [DEBUG] HTTP line: {"id"=2,"name":"Bob","email":"bob@test.com","password":"hash2"}
+[2026-04-10 10:16:55] [INFO] POST /api/user body={"id"=2,"name":"Bob","email":"bob@test.com","password":"hash2"}
+[2026-04-10 10:17:47] [DEBUG] HTTP line: POST /api/user HTTP/1.1
+[2026-04-10 10:17:47] [DEBUG] HTTP line: Host: localhost:8080
+[2026-04-10 10:17:47] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-10 10:17:47] [DEBUG] HTTP line: Accept: */*
+[2026-04-10 10:17:47] [DEBUG] HTTP line: Content-Type: application/json
+[2026-04-10 10:17:47] [DEBUG] HTTP line: Content-Length: 63
+[2026-04-10 10:17:47] [DEBUG] HTTP line: 
+[2026-04-10 10:17:47] [DEBUG] HTTP line: {"id":2,"name":"Bob","email":"bob@test.com","password":"hash2"}
+[2026-04-10 10:17:47] [INFO] POST /api/user body={"id":2,"name":"Bob","email":"bob@test.com","password":"hash2"}
+[2026-04-10 10:17:47] [DEBUG] SQL: INSERT INTO users (id,name,email,password) values (2,'Bob','bob@test.com','e7bf382f6e5915b3f88619b866223ebf1d51c4c5321cccde2e9ff70a3259086')
+[2026-04-10 10:18:20] [DEBUG] HTTP line: POST /api/user HTTP/1.1
+[2026-04-10 10:18:20] [DEBUG] HTTP line: Host: localhost:8080
+[2026-04-10 10:18:20] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-10 10:18:20] [DEBUG] HTTP line: Accept: */*
+[2026-04-10 10:18:20] [DEBUG] HTTP line: Content-Type: application/json
+[2026-04-10 10:18:20] [DEBUG] HTTP line: Content-Length: 67
+[2026-04-10 10:18:20] [DEBUG] HTTP line: 
+[2026-04-10 10:18:20] [DEBUG] HTTP line: {"id":3,"name":"Julia","email":"julia@test.com","password":"hash3"}
+[2026-04-10 10:18:20] [INFO] POST /api/user body={"id":3,"name":"Julia","email":"julia@test.com","password":"hash3"}
+[2026-04-10 10:18:20] [DEBUG] SQL: INSERT INTO users (id,name,email,password) values (3,'Julia','julia@test.com','42caa4abb7b6f8f914e5bfb8e6511d7d9bd9817de719b74251755d97fe97bf1')
+[2026-04-10 10:18:49] [DEBUG] HTTP line: POST /api/login HTTP/1.1
+[2026-04-10 10:18:49] [DEBUG] HTTP line: Host: localhost:8080
+[2026-04-10 10:18:49] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-10 10:18:49] [DEBUG] HTTP line: Accept: */*
+[2026-04-10 10:18:49] [DEBUG] HTTP line: Content-Type: application/json
+[2026-04-10 10:18:49] [DEBUG] HTTP line: Content-Length: 45
+[2026-04-10 10:18:49] [DEBUG] HTTP line: 
+[2026-04-10 10:18:49] [DEBUG] HTTP line: {"email":"alice@test.com","password":"hash1"}
+[2026-04-10 10:18:49] [INFO] POST /api/login body={"email":"alice@test.com","password":"hash1"}
+[2026-04-10 10:18:49] [DEBUG] SQL: SELECT id, name, email, password FROM users WHERE email='alice@test.com'
+[2026-04-10 10:19:44] [DEBUG] HTTP line: GET /api/user?id=2 HTTP/1.1
+[2026-04-10 10:19:44] [DEBUG] HTTP line: Host: localhost:8080
+[2026-04-10 10:19:44] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-10 10:19:44] [DEBUG] HTTP line: Accept: */*
+[2026-04-10 10:19:44] [DEBUG] HTTP line: Authorization: Bearer fa37JncCHryDsbzayy4cBWDxS22JjzhM
+[2026-04-10 10:19:44] [DEBUG] HTTP line: 
+[2026-04-10 10:19:44] [DEBUG] SQL: SELECT user_id FROM sessions WHERE token='fa37JncCHryDsbzayy4cBWDxS22JjzhM'
+[2026-04-10 10:19:44] [INFO] GET /api/user?id=2
+[2026-04-10 10:19:44] [DEBUG] SQL: SELECT id, name, email FROM users WHERE id=2
+[2026-04-10 10:35:11] [DEBUG] HTTP line: POST /api/login HTTP/1.1
+[2026-04-10 10:35:11] [DEBUG] HTTP line: Host: localhost:8080
+[2026-04-10 10:35:11] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-10 10:35:11] [DEBUG] HTTP line: Accept: */*
+[2026-04-10 10:35:11] [DEBUG] HTTP line: Content-Type: application/json
+[2026-04-10 10:35:11] [DEBUG] HTTP line: Content-Length: 45
+[2026-04-10 10:35:11] [DEBUG] HTTP line: 
+[2026-04-10 10:35:11] [DEBUG] HTTP line: {"email":"alice@test.com","password":"hash1"}
+[2026-04-10 10:35:11] [INFO] POST /api/login body={"email":"alice@test.com","password":"hash1"}
+[2026-04-10 10:35:11] [DEBUG] SQL: SELECT id, name, email, password FROM users WHERE email='alice@test.com'
+[2026-04-10 10:35:11] [ERROR] Query failed: INSERT INTO sessions (user_id, token) VALUES (1, 'fa37JncCHryDsbzayy4cBWDxS22JjzhM')
+[2026-04-10 10:35:43] [DEBUG] HTTP line: POST /api/logout HTTP/1.1
+[2026-04-10 10:35:43] [DEBUG] HTTP line: Host: localhost:8080
+[2026-04-10 10:35:43] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-10 10:35:43] [DEBUG] HTTP line: Accept: */*
+[2026-04-10 10:35:43] [DEBUG] HTTP line: Authorization: Bearer fa37JncCHryDsbzayy4cBWDxS22JjzhM
+[2026-04-10 10:35:43] [DEBUG] HTTP line: 
+[2026-04-10 10:35:43] [DEBUG] HTTP line: 
+[2026-04-10 10:38:33] [DEBUG] HTTP line: POST /api/login HTTP/1.1
+[2026-04-10 10:38:33] [DEBUG] HTTP line: Host: localhost:8080
+[2026-04-10 10:38:33] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-10 10:38:33] [DEBUG] HTTP line: Accept: */*
+[2026-04-10 10:38:33] [DEBUG] HTTP line: Content-Type: application/json
+[2026-04-10 10:38:33] [DEBUG] HTTP line: Content-Length: 45
+[2026-04-10 10:38:33] [DEBUG] HTTP line: 
+[2026-04-10 10:38:33] [DEBUG] HTTP line: {"email":"alice@test.com","password":"hash1"}
+[2026-04-10 10:38:33] [INFO] POST /api/login body={"email":"alice@test.com","password":"hash1"}
+[2026-04-10 10:38:33] [DEBUG] SQL: SELECT id, name, email, password FROM users WHERE email='alice@test.com'
+[2026-04-10 10:38:33] [ERROR] Query failed: INSERT INTO sessions (user_id, token) VALUES (1, 'fa37JncCHryDsbzayy4cBWDxS22JjzhM')
+[2026-04-10 10:40:36] [DEBUG] HTTP line: POST /api/login HTTP/1.1
+[2026-04-10 10:40:36] [DEBUG] HTTP line: Host: localhost:8080
+[2026-04-10 10:40:36] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-10 10:40:36] [DEBUG] HTTP line: Accept: */*
+[2026-04-10 10:40:36] [DEBUG] HTTP line: Content-Type: application/json
+[2026-04-10 10:40:36] [DEBUG] HTTP line: Content-Length: 45
+[2026-04-10 10:40:36] [DEBUG] HTTP line: 
+[2026-04-10 10:40:36] [DEBUG] HTTP line: {"email":"alice@test.com","password":"hash1"}
+[2026-04-10 10:40:36] [INFO] POST /api/login body={"email":"alice@test.com","password":"hash1"}
+[2026-04-10 10:40:36] [DEBUG] SQL: SELECT id, name, email, password FROM users WHERE email='alice@test.com'
+[2026-04-10 10:47:07] [DEBUG] HTTP line: POST /api/logout HTTP/1.1
+[2026-04-10 10:47:07] [DEBUG] HTTP line: Host: localhost:8080
+[2026-04-10 10:47:07] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-10 10:47:07] [DEBUG] HTTP line: Accept: */*
+[2026-04-10 10:47:07] [DEBUG] HTTP line: Authorization: Bearer aiRrV41mtzxlYvKWrO72tK0LK0e1zLOZ
+[2026-04-10 10:47:07] [DEBUG] HTTP line: Content-Length: 0
+[2026-04-10 10:47:07] [DEBUG] HTTP line: 
+[2026-04-10 10:47:07] [DEBUG] HTTP line: 
+[2026-04-11 01:03:15] [DEBUG] HTTP line: POST /api/login HTTP/1.1
+[2026-04-11 01:03:15] [DEBUG] HTTP line: Host: localhost:8080
+[2026-04-11 01:03:15] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-11 01:03:15] [DEBUG] HTTP line: Accept: */*
+[2026-04-11 01:03:15] [DEBUG] HTTP line: Content-Type: application/json
+[2026-04-11 01:03:15] [DEBUG] HTTP line: Connection: keep-alive
+[2026-04-11 01:03:15] [DEBUG] HTTP line: Content-Length: 45
+[2026-04-11 01:03:15] [DEBUG] HTTP line: 
+[2026-04-11 01:03:15] [DEBUG] HTTP line: {"email":"alice@test.com","password":"hash1"}
+[2026-04-11 01:03:15] [INFO] POST /api/login body={"email":"alice@test.com","password":"hash1"}
+[2026-04-11 01:03:15] [DEBUG] SQL: SELECT id, name, email, password FROM users WHERE email='alice@test.com'
+[2026-04-11 01:05:50] [DEBUG] HTTP line: GET /api/user?id=1 HTTP/1.1
+[2026-04-11 01:05:50] [DEBUG] HTTP line: Host: localhost:8080
+[2026-04-11 01:05:50] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-11 01:05:50] [DEBUG] HTTP line: Accept: */*
+[2026-04-11 01:05:50] [DEBUG] HTTP line: Authorization: Bearer fa37JncCHryDsbzayy4cBWDxS22JjzhM 
+[2026-04-11 01:05:50] [DEBUG] HTTP line: 
+[2026-04-11 01:05:50] [DEBUG] SQL: SELECT user_id FROM sessions WHERE token='fa37JncCHryDsbzayy4cBWDxS22JjzhM ' AND expires_at > NOW()
+[2026-04-11 01:05:50] [ERROR] unauthorized
+[2026-04-11 01:07:55] [DEBUG] HTTP line: GET /api/user?id=1 HTTP/1.1
+[2026-04-11 01:07:55] [DEBUG] HTTP line: Host: localhost:8080
+[2026-04-11 01:07:55] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-11 01:07:55] [DEBUG] HTTP line: Accept: */*
+[2026-04-11 01:07:55] [DEBUG] HTTP line: Authorization: Bearer fa37JncCHryDsbzayy4cBWDxS22JjzhM
+[2026-04-11 01:07:55] [DEBUG] HTTP line: 
+[2026-04-11 01:07:55] [DEBUG] SQL: SELECT user_id FROM sessions WHERE token='fa37JncCHryDsbzayy4cBWDxS22JjzhM' AND expires_at > NOW()
+[2026-04-11 01:07:55] [INFO] GET /api/user?id=1
+[2026-04-11 01:07:55] [DEBUG] SQL: SELECT id, name, email FROM users WHERE id=1
+[2026-04-11 01:41:21] [DEBUG] HTTP line: DELETE /api/user?id=1 HTTP/1.1
+[2026-04-11 01:41:21] [DEBUG] HTTP line: Host: localhost:8080
+[2026-04-11 01:41:21] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-11 01:41:21] [DEBUG] HTTP line: Accept: */*
+[2026-04-11 01:41:21] [DEBUG] HTTP line: Authorization: Bearer fa37JncCHryDsbzayy4cBWDxS22JjzhM
+[2026-04-11 01:41:21] [DEBUG] HTTP line: 
+[2026-04-11 01:41:21] [DEBUG] SQL: SELECT user_id FROM sessions WHERE token='fa37JncCHryDsbzayy4cBWDxS22JjzhM' AND expires_at > NOW()
+[2026-04-11 01:41:21] [INFO] DELETE /api/user?id=1
+[2026-04-11 01:41:21] [DEBUG] SQL: DELETE FROM users WHERE id=1
+[2026-04-11 01:41:21] [ERROR] Query failed: DELETE FROM users WHERE id=1
+[2026-04-11 01:41:35] [DEBUG] HTTP line: DELETE /api/user?id=2 HTTP/1.1
+[2026-04-11 01:41:35] [DEBUG] HTTP line: Host: localhost:8080
+[2026-04-11 01:41:35] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-11 01:41:35] [DEBUG] HTTP line: Accept: */*
+[2026-04-11 01:41:35] [DEBUG] HTTP line: Authorization: Bearer fa37JncCHryDsbzayy4cBWDxS22JjzhM
+[2026-04-11 01:41:35] [DEBUG] HTTP line: 
+[2026-04-11 01:41:35] [DEBUG] SQL: SELECT user_id FROM sessions WHERE token='fa37JncCHryDsbzayy4cBWDxS22JjzhM' AND expires_at > NOW()
+[2026-04-11 01:41:35] [INFO] DELETE /api/user?id=2
+[2026-04-11 01:41:35] [DEBUG] SQL: DELETE FROM users WHERE id=2
+[2026-04-11 01:45:59] [DEBUG] HTTP line: POST /api/logout HTTP/1.1
+[2026-04-11 01:45:59] [DEBUG] HTTP line: Host: localhost:8080
+[2026-04-11 01:45:59] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-11 01:45:59] [DEBUG] HTTP line: Accept: */*
+[2026-04-11 01:45:59] [DEBUG] HTTP line: Authorization: fa37JncCHryDsbzayy4cBWDxS22JjzhM
+[2026-04-11 01:45:59] [DEBUG] HTTP line: 
+[2026-04-11 01:45:59] [DEBUG] HTTP line: 
+[2026-04-11 07:46:47] [DEBUG] HTTP line: POST /api/login HTTP/1.1
+[2026-04-11 07:46:47] [DEBUG] HTTP line: Host: localhost:8080
+[2026-04-11 07:46:47] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-11 07:46:47] [DEBUG] HTTP line: Accept: */*
+[2026-04-11 07:46:47] [DEBUG] HTTP line: Content-Type: application/json
+[2026-04-11 07:46:47] [DEBUG] HTTP line: Content-Length: 45
+[2026-04-11 07:46:47] [DEBUG] HTTP line: 
+[2026-04-11 07:46:47] [DEBUG] HTTP line: {"email":"alice@test.com","password":"hash1"}
+[2026-04-11 07:46:47] [INFO] POST /api/login body={"email":"alice@test.com","password":"hash1"}
+[2026-04-11 07:46:47] [DEBUG] SQL: SELECT id, name, email, password FROM users WHERE email='alice@test.com'
+[2026-04-11 07:50:13] [DEBUG] HTTP line: GET /api/user?id=1 HTTP/1.1
+[2026-04-11 07:50:13] [DEBUG] HTTP line: Host: localhost:8080
+[2026-04-11 07:50:13] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-11 07:50:13] [DEBUG] HTTP line: Accept: */*
+[2026-04-11 07:50:13] [DEBUG] HTTP line: Authorization: Bearer fa37JncCHryDsbzayy4cBWDxS22JjzhM
+[2026-04-11 07:50:13] [DEBUG] HTTP line: 
+[2026-04-11 07:50:13] [DEBUG] SQL: SELECT user_id FROM sessions WHERE token='fa37JncCHryDsbzayy4cBWDxS22JjzhM' AND expires_at > NOW()
+[2026-04-11 07:50:13] [INFO] GET /api/user?id=1
+[2026-04-11 07:50:13] [DEBUG] SQL: SELECT id, name, email FROM users WHERE id=1
+[2026-04-11 07:50:38] [DEBUG] HTTP line: POST /api/logout HTTP/1.1
+[2026-04-11 07:50:38] [DEBUG] HTTP line: Host: localhost:8080
+[2026-04-11 07:50:38] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-11 07:50:38] [DEBUG] HTTP line: Accept: */*
+[2026-04-11 07:50:38] [DEBUG] HTTP line: Authorization: Bearer fa37JncCHryDsbzayy4cBWDxS22JjzhM
+[2026-04-11 07:50:38] [DEBUG] HTTP line: 
+[2026-04-11 07:50:38] [DEBUG] HTTP line: 
+[2026-04-11 07:51:18] [DEBUG] HTTP line: POST /api/login HTTP/1.1
+[2026-04-11 07:51:18] [DEBUG] HTTP line: Host: localhost:8080
+[2026-04-11 07:51:18] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-11 07:51:18] [DEBUG] HTTP line: Accept: */*
+[2026-04-11 07:51:18] [DEBUG] HTTP line: Content-Type: application/json
+[2026-04-11 07:51:18] [DEBUG] HTTP line: Content-Length: 45
+[2026-04-11 07:51:18] [DEBUG] HTTP line: 
+[2026-04-11 07:51:18] [DEBUG] HTTP line: {"email":"alice@test.com","password":"hash1"}
+[2026-04-11 07:51:18] [INFO] POST /api/login body={"email":"alice@test.com","password":"hash1"}
+[2026-04-11 07:51:18] [DEBUG] SQL: SELECT id, name, email, password FROM users WHERE email='alice@test.com'
+[2026-04-11 07:53:15] [DEBUG] HTTP line: GET /api/user?id=1 HTTP/1.1
+[2026-04-11 07:53:15] [DEBUG] HTTP line: Host: localhost:8080
+[2026-04-11 07:53:15] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-11 07:53:15] [DEBUG] HTTP line: Accept: */*
+[2026-04-11 07:53:15] [DEBUG] HTTP line: Authorization: Bearer aiRrV41mtzxlYvKWrO72tK0LK0e1zLOZ
+[2026-04-11 07:53:15] [DEBUG] HTTP line: 
+[2026-04-11 07:53:15] [DEBUG] SQL: SELECT user_id FROM sessions WHERE token='aiRrV41mtzxlYvKWrO72tK0LK0e1zLOZ' AND expires_at > NOW()
+[2026-04-11 07:53:15] [INFO] GET /api/user?id=1
+[2026-04-11 07:53:15] [DEBUG] SQL: SELECT id, name, email FROM users WHERE id=1
+[2026-04-11 07:53:36] [DEBUG] HTTP line: POST /api/logout HTTP/1.1
+[2026-04-11 07:53:36] [DEBUG] HTTP line: Host: localhost:8080
+[2026-04-11 07:53:36] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-11 07:53:36] [DEBUG] HTTP line: Accept: */*
+[2026-04-11 07:53:36] [DEBUG] HTTP line: Authorization: Bearer aiRrV41mtzxlYvKWrO72tK0LK0e1zLOZ
+[2026-04-11 07:53:36] [DEBUG] HTTP line: 
+[2026-04-11 07:53:36] [DEBUG] HTTP line: 
+[2026-04-11 07:53:46] [DEBUG] HTTP line: POST /api/login HTTP/1.1
+[2026-04-11 07:53:46] [DEBUG] HTTP line: Host: localhost:8080
+[2026-04-11 07:53:46] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-11 07:53:46] [DEBUG] HTTP line: Accept: */*
+[2026-04-11 07:53:46] [DEBUG] HTTP line: Content-Type: application/json
+[2026-04-11 07:53:46] [DEBUG] HTTP line: Content-Length: 45
+[2026-04-11 07:53:46] [DEBUG] HTTP line: 
+[2026-04-11 07:53:46] [DEBUG] HTTP line: {"email":"alice@test.com","password":"hash1"}
+[2026-04-11 07:53:46] [INFO] POST /api/login body={"email":"alice@test.com","password":"hash1"}
+[2026-04-11 07:53:46] [DEBUG] SQL: SELECT id, name, email, password FROM users WHERE email='alice@test.com'
+[2026-04-11 07:54:06] [DEBUG] HTTP line: GET /api/user?id=1 HTTP/1.1
+[2026-04-11 07:54:06] [DEBUG] HTTP line: Host: localhost:8080
+[2026-04-11 07:54:06] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-11 07:54:06] [DEBUG] HTTP line: Accept: */*
+[2026-04-11 07:54:06] [DEBUG] HTTP line: Authorization: Bearer 2nOXpPIhMFSv8kP07U20o0J90xA0GWXI
+[2026-04-11 07:54:06] [DEBUG] HTTP line: 
+[2026-04-11 07:54:06] [DEBUG] SQL: SELECT user_id FROM sessions WHERE token='2nOXpPIhMFSv8kP07U20o0J90xA0GWXI' AND expires_at > NOW()
+[2026-04-11 07:54:06] [INFO] GET /api/user?id=1
+[2026-04-11 07:54:06] [DEBUG] SQL: SELECT id, name, email FROM users WHERE id=1
+[2026-04-11 07:54:22] [DEBUG] HTTP line: GET /api/user?id=1 HTTP/1.1
+[2026-04-11 07:54:22] [DEBUG] HTTP line: Host: localhost:8080
+[2026-04-11 07:54:22] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-11 07:54:22] [DEBUG] HTTP line: Accept: */*
+[2026-04-11 07:54:22] [DEBUG] HTTP line: Authorization: Bearer 2nOXpPIhMFSv8kP07U20o0J90xA0GWXI
+[2026-04-11 07:54:22] [DEBUG] HTTP line: 
+[2026-04-11 07:54:22] [DEBUG] SQL: SELECT user_id FROM sessions WHERE token='2nOXpPIhMFSv8kP07U20o0J90xA0GWXI' AND expires_at > NOW()
+[2026-04-11 07:54:22] [INFO] GET /api/user?id=1
+[2026-04-11 07:54:22] [DEBUG] SQL: SELECT id, name, email FROM users WHERE id=1
+[2026-04-11 07:54:55] [DEBUG] HTTP line: POST /api/logout HTTP/1.1
+[2026-04-11 07:54:55] [DEBUG] HTTP line: Host: localhost:8080
+[2026-04-11 07:54:55] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-11 07:54:55] [DEBUG] HTTP line: Accept: */*
+[2026-04-11 07:54:55] [DEBUG] HTTP line: Authorization: Bearer 2nOXpPIhMFSv8kP07U20o0J90xA0GWXI
+[2026-04-11 07:54:55] [DEBUG] HTTP line: 
+[2026-04-11 07:54:55] [DEBUG] HTTP line: 
+[2026-04-11 09:13:30] [DEBUG] HTTP line: POST /api/login HTTP/1.1
+[2026-04-11 09:13:30] [DEBUG] HTTP line: Host: backend
+[2026-04-11 09:13:30] [DEBUG] HTTP line: Content-Length: 47
+[2026-04-11 09:13:30] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-11 09:13:30] [DEBUG] HTTP line: Accept: */*
+[2026-04-11 09:13:30] [DEBUG] HTTP line: Content-Type: application/json
+[2026-04-11 09:13:30] [DEBUG] HTTP line: 
+[2026-04-11 09:13:30] [DEBUG] HTTP line: {"email":"alice@test.com","password”:"hash1"}
+[2026-04-11 09:13:30] [INFO] POST /api/login body={"email":"alice@test.com","password”:"hash1"}
+[2026-04-11 09:21:52] [DEBUG] HTTP line: POST /api/login HTTP/1.1
+[2026-04-11 09:21:52] [DEBUG] HTTP line: Host: localhost:8081
+[2026-04-11 09:21:52] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-11 09:21:52] [DEBUG] HTTP line: Accept: */*
+[2026-04-11 09:21:52] [DEBUG] HTTP line: Content-Type: application/json
+[2026-04-11 09:21:52] [DEBUG] HTTP line: Content-Length: 47
+[2026-04-11 09:21:52] [DEBUG] HTTP line: 
+[2026-04-11 09:21:52] [DEBUG] HTTP line: {"email":"alice@test.com","password”:"hash1"}
+[2026-04-11 09:21:52] [INFO] POST /api/login body={"email":"alice@test.com","password”:"hash1"}
+[2026-04-11 09:23:54] [DEBUG] HTTP line: POST /api/login HTTP/1.1
+[2026-04-11 09:23:54] [DEBUG] HTTP line: Host: localhost:8081
+[2026-04-11 09:23:54] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-11 09:23:54] [DEBUG] HTTP line: Accept: */*
+[2026-04-11 09:23:54] [DEBUG] HTTP line: Content-Type: application/json
+[2026-04-11 09:23:54] [DEBUG] HTTP line: Content-Length: 47
+[2026-04-11 09:23:54] [DEBUG] HTTP line: 
+[2026-04-11 09:23:54] [DEBUG] HTTP line: {"email":"alice@test.com","password”:"hash1"}
+[2026-04-11 09:23:54] [INFO] POST /api/login body={"email":"alice@test.com","password”:"hash1"}
+[2026-04-11 09:25:19] [DEBUG] HTTP line: POST /api/login HTTP/1.1
+[2026-04-11 09:25:19] [DEBUG] HTTP line: Host: localhost:8081
+[2026-04-11 09:25:19] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-11 09:25:19] [DEBUG] HTTP line: Accept: */*
+[2026-04-11 09:25:19] [DEBUG] HTTP line: Content-Type: application/json
+[2026-04-11 09:25:19] [DEBUG] HTTP line: Content-Length: 45
+[2026-04-11 09:25:19] [DEBUG] HTTP line: 
+[2026-04-11 09:25:19] [DEBUG] HTTP line: {"email":"alice@test.com","password":"hash1"}
+[2026-04-11 09:25:19] [INFO] POST /api/login body={"email":"alice@test.com","password":"hash1"}
+[2026-04-11 09:25:19] [DEBUG] SQL: SELECT id, name, email, password FROM users WHERE email='alice@test.com'
+[2026-04-11 09:29:34] [DEBUG] HTTP line: GET /api/user?id=1 HTTP/1.1
+[2026-04-11 09:29:34] [DEBUG] HTTP line: Host: localhost:8081
+[2026-04-11 09:29:34] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-11 09:29:34] [DEBUG] HTTP line: Accept: */*
+[2026-04-11 09:29:34] [DEBUG] HTTP line: Authorization: Bearer fa37JncCHryDsbzayy4cBWDxS22JjzhM
+[2026-04-11 09:29:34] [DEBUG] HTTP line: 
+[2026-04-11 09:29:34] [DEBUG] SQL: SELECT user_id FROM sessions WHERE token='fa37JncCHryDsbzayy4cBWDxS22JjzhM' AND expires_at > NOW()
+[2026-04-11 09:29:34] [INFO] GET /api/user?id=1
+[2026-04-11 09:29:34] [DEBUG] SQL: SELECT id, name, email FROM users WHERE id=1
+[2026-04-11 09:30:12] [DEBUG] HTTP line: POST /api/logout HTTP/1.1
+[2026-04-11 09:30:12] [DEBUG] HTTP line: Host: localhost:8081
+[2026-04-11 09:30:12] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-11 09:30:12] [DEBUG] HTTP line: Accept: */*
+[2026-04-11 09:30:12] [DEBUG] HTTP line: Authorization: Bearer fa37JncCHryDsbzayy4cBWDxS22JjzhM
+[2026-04-11 09:30:12] [DEBUG] HTTP line: 
+[2026-04-11 09:30:12] [DEBUG] HTTP line: 
+[2026-04-11 09:35:16] [DEBUG] HTTP line: GET /api/user?id=1 HTTP/1.1
+[2026-04-11 09:35:16] [DEBUG] HTTP line: Host: localhost:8081
+[2026-04-11 09:35:16] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-11 09:35:16] [DEBUG] HTTP line: Accept: */*
+[2026-04-11 09:35:16] [DEBUG] HTTP line: Authorization: Bearer fa37JncCHryDsbzayy4cBWDxS22JjzhM
+[2026-04-11 09:35:16] [DEBUG] HTTP line: 
+[2026-04-11 09:35:16] [DEBUG] SQL: SELECT user_id FROM sessions WHERE token='fa37JncCHryDsbzayy4cBWDxS22JjzhM' AND expires_at > NOW()
+[2026-04-11 09:35:16] [ERROR] unauthorized
+[2026-04-11 09:36:41] [DEBUG] HTTP line: POST /api/login HTTP/1.1
+[2026-04-11 09:36:41] [DEBUG] HTTP line: Host: backend
+[2026-04-11 09:36:41] [DEBUG] HTTP line: Content-Length: 45
+[2026-04-11 09:36:41] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-11 09:36:41] [DEBUG] HTTP line: Accept: */*
+[2026-04-11 09:36:41] [DEBUG] HTTP line: Content-Type: application/json
+[2026-04-11 09:36:41] [DEBUG] HTTP line: 
+[2026-04-11 09:36:41] [DEBUG] HTTP line: {"email":"alice@test.com","password":"hash1"}
+[2026-04-11 09:36:41] [INFO] POST /api/login body={"email":"alice@test.com","password":"hash1"}
+[2026-04-11 09:36:41] [DEBUG] SQL: SELECT id, name, email, password FROM users WHERE email='alice@test.com'
+[2026-04-11 09:37:39] [DEBUG] HTTP line: GET /api/user?id=1 HTTP/1.1
+[2026-04-11 09:37:39] [DEBUG] HTTP line: Host: localhost:8081
+[2026-04-11 09:37:39] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-11 09:37:39] [DEBUG] HTTP line: Accept: */*
+[2026-04-11 09:37:39] [DEBUG] HTTP line: Authorization: Bearer fa37JncCHryDsbzayy4cBWDxS22JjzhM
+[2026-04-11 09:37:39] [DEBUG] HTTP line: 
+[2026-04-11 09:37:39] [DEBUG] SQL: SELECT user_id FROM sessions WHERE token='fa37JncCHryDsbzayy4cBWDxS22JjzhM' AND expires_at > NOW()
+[2026-04-11 09:37:39] [INFO] GET /api/user?id=1
+[2026-04-11 09:37:39] [DEBUG] SQL: SELECT id, name, email FROM users WHERE id=1
+[2026-04-11 09:39:50] [DEBUG] HTTP line: GET /api/user?id=1 HTTP/1.1
+[2026-04-11 09:39:50] [DEBUG] HTTP line: Host: backend
+[2026-04-11 09:39:50] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-11 09:39:50] [DEBUG] HTTP line: Accept: */*
+[2026-04-11 09:39:50] [DEBUG] HTTP line: Authorization: Bearer fa37JncCHryDsbzayy4cBWDxS22JjzhM
+[2026-04-11 09:39:50] [DEBUG] HTTP line: 
+[2026-04-11 09:39:50] [DEBUG] SQL: SELECT user_id FROM sessions WHERE token='fa37JncCHryDsbzayy4cBWDxS22JjzhM' AND expires_at > NOW()
+[2026-04-11 09:39:50] [INFO] GET /api/user?id=1
+[2026-04-11 09:39:50] [DEBUG] SQL: SELECT id, name, email FROM users WHERE id=1
+[2026-04-11 09:41:36] [DEBUG] HTTP line: POST /api/logout HTTP/1.1
+[2026-04-11 09:41:36] [DEBUG] HTTP line: Host: backend
+[2026-04-11 09:41:36] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-11 09:41:36] [DEBUG] HTTP line: Accept: */*
+[2026-04-11 09:41:36] [DEBUG] HTTP line: Authorization: Bearer fa37JncCHryDsbzayy4cBWDxS22JjzhM
+[2026-04-11 09:41:36] [DEBUG] HTTP line: 
+[2026-04-11 09:41:36] [DEBUG] HTTP line: 
+[2026-04-13 01:49:48] [DEBUG] HTTP line: POST /api/register HTTP/1.1
+[2026-04-13 01:49:48] [DEBUG] HTTP line: Host: backend
+[2026-04-13 01:49:48] [DEBUG] HTTP line: Content-Length: 53
+[2026-04-13 01:49:48] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-13 01:49:48] [DEBUG] HTTP line: Accept: */*
+[2026-04-13 01:49:48] [DEBUG] HTTP line: Content-Type: application/json
+[2026-04-13 01:49:48] [DEBUG] HTTP line: 
+[2026-04-13 01:49:48] [DEBUG] HTTP line: {"id":3,"email":"Andres@test.com","password":"hash3"}
+[2026-04-13 01:49:48] [INFO] POST /api/register body={"id":3,"email":"Andres@test.com","password":"hash3"}
+[2026-04-13 01:49:48] [DEBUG] SQL: INSERT INTO users (id,email,password) values (3,'Andres@test.com','42caa4abb7b6f8f914e5bfb8e6511d7d9bd9817de719b74251755d97fe97bf1')
+[2026-04-13 01:49:48] [ERROR] Query failed: INSERT INTO users (id,email,password) values (3,'Andres@test.com','42caa4abb7b6f8f914e5bfb8e6511d7d9bd9817de719b74251755d97fe97bf1')
+[2026-04-13 01:51:19] [DEBUG] HTTP line: POST /api/login HTTP/1.1
+[2026-04-13 01:51:19] [DEBUG] HTTP line: Host: backend
+[2026-04-13 01:51:19] [DEBUG] HTTP line: Content-Length: 52
+[2026-04-13 01:51:19] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-13 01:51:19] [DEBUG] HTTP line: Accept: */*
+[2026-04-13 01:51:19] [DEBUG] HTTP line: Content-Type: application/json
+[2026-04-13 01:51:19] [DEBUG] HTTP line: 
+[2026-04-13 01:51:19] [DEBUG] HTTP line: {"email”:”alice@test.com","password":"hash1”}}
+[2026-04-13 01:51:19] [INFO] POST /api/login body={"email”:”alice@test.com","password":"hash1”}}
+[2026-04-13 01:51:44] [DEBUG] HTTP line: POST /api/login HTTP/1.1
+[2026-04-13 01:51:44] [DEBUG] HTTP line: Host: backend
+[2026-04-13 01:51:44] [DEBUG] HTTP line: Content-Length: 51
+[2026-04-13 01:51:44] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-13 01:51:44] [DEBUG] HTTP line: Accept: */*
+[2026-04-13 01:51:44] [DEBUG] HTTP line: Content-Type: application/json
+[2026-04-13 01:51:44] [DEBUG] HTTP line: 
+[2026-04-13 01:51:44] [DEBUG] HTTP line: {"email”:”alice@test.com","password":"hash1”}
+[2026-04-13 01:51:44] [INFO] POST /api/login body={"email”:”alice@test.com","password":"hash1”}
+[2026-04-13 01:52:00] [DEBUG] HTTP line: POST /api/login HTTP/1.1
+[2026-04-13 01:52:00] [DEBUG] HTTP line: Host: backend
+[2026-04-13 01:52:00] [DEBUG] HTTP line: Content-Length: 51
+[2026-04-13 01:52:00] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-13 01:52:00] [DEBUG] HTTP line: Accept: */*
+[2026-04-13 01:52:00] [DEBUG] HTTP line: Content-Type: application/json
+[2026-04-13 01:52:00] [DEBUG] HTTP line: 
+[2026-04-13 01:52:00] [DEBUG] HTTP line: {"email”:”alice@test.com","password":"hash1”}
+[2026-04-13 01:52:00] [INFO] POST /api/login body={"email”:”alice@test.com","password":"hash1”}
+[2026-04-13 01:54:18] [DEBUG] HTTP line: POST /api/login HTTP/1.1
+[2026-04-13 01:54:18] [DEBUG] HTTP line: Host: backend
+[2026-04-13 01:54:18] [DEBUG] HTTP line: Content-Length: 46
+[2026-04-13 01:54:18] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-13 01:54:18] [DEBUG] HTTP line: Accept: */*
+[2026-04-13 01:54:18] [DEBUG] HTTP line: Content-Type: application/json
+[2026-04-13 01:54:18] [DEBUG] HTTP line: 
+[2026-04-13 01:54:18] [DEBUG] HTTP line: {"email":"Andres@test.com","password":"hash1"}
+[2026-04-13 01:54:18] [INFO] POST /api/login body={"email":"Andres@test.com","password":"hash1"}
+[2026-04-13 01:54:18] [DEBUG] SQL: SELECT id, name, email, password FROM users WHERE email='Andres@test.com'
+[2026-04-13 01:54:18] [ERROR] User not found
+[2026-04-13 01:54:18] [ERROR] user not found
+[2026-04-13 01:54:28] [DEBUG] HTTP line: POST /api/login HTTP/1.1
+[2026-04-13 01:54:28] [DEBUG] HTTP line: Host: backend
+[2026-04-13 01:54:28] [DEBUG] HTTP line: Content-Length: 45
+[2026-04-13 01:54:28] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-13 01:54:28] [DEBUG] HTTP line: Accept: */*
+[2026-04-13 01:54:28] [DEBUG] HTTP line: Content-Type: application/json
+[2026-04-13 01:54:28] [DEBUG] HTTP line: 
+[2026-04-13 01:54:28] [DEBUG] HTTP line: {"email":"alice@test.com","password":"hash1"}
+[2026-04-13 01:54:28] [INFO] POST /api/login body={"email":"alice@test.com","password":"hash1"}
+[2026-04-13 01:54:28] [DEBUG] SQL: SELECT id, name, email, password FROM users WHERE email='alice@test.com'
+[2026-04-13 01:55:31] [DEBUG] HTTP line: POST /api/logout HTTP/1.1
+[2026-04-13 01:55:31] [DEBUG] HTTP line: Host: backend
+[2026-04-13 01:55:31] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-13 01:55:31] [DEBUG] HTTP line: Accept: */*
+[2026-04-13 01:55:31] [DEBUG] HTTP line: Authorization: Bearer fa37JncCHryDsbzayy4cBWDxS22JjzhM
+[2026-04-13 01:55:31] [DEBUG] HTTP line: 
+[2026-04-13 01:55:31] [DEBUG] HTTP line: 
+[2026-04-13 01:55:40] [DEBUG] HTTP line: POST /api/register HTTP/1.1
+[2026-04-13 01:55:40] [DEBUG] HTTP line: Host: backend
+[2026-04-13 01:55:40] [DEBUG] HTTP line: Content-Length: 57
+[2026-04-13 01:55:40] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-13 01:55:40] [DEBUG] HTTP line: Accept: */*
+[2026-04-13 01:55:40] [DEBUG] HTTP line: Content-Type: application/json
+[2026-04-13 01:55:40] [DEBUG] HTTP line: 
+[2026-04-13 01:55:40] [DEBUG] HTTP line: {"id":3,"email”:”andrew@test.com","password":"hash3"}
+[2026-04-13 01:55:40] [INFO] POST /api/register body={"id":3,"email”:”andrew@test.com","password":"hash3"}
+[2026-04-13 01:57:22] [DEBUG] HTTP line: POST /api/register HTTP/1.1
+[2026-04-13 01:57:22] [DEBUG] HTTP line: Host: backend
+[2026-04-13 01:57:22] [DEBUG] HTTP line: Content-Length: 55
+[2026-04-13 01:57:22] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-13 01:57:22] [DEBUG] HTTP line: Accept: */*
+[2026-04-13 01:57:22] [DEBUG] HTTP line: Content-Type: application/json
+[2026-04-13 01:57:22] [DEBUG] HTTP line: 
+[2026-04-13 01:57:22] [DEBUG] HTTP line: {"id":10,"email":"andrewL@test.com","password":"hash3"}
+[2026-04-13 01:57:22] [INFO] POST /api/register body={"id":10,"email":"andrewL@test.com","password":"hash3"}
+[2026-04-13 01:57:22] [DEBUG] SQL: INSERT INTO users (id,email,password) values (10,'andrewL@test.com','42caa4abb7b6f8f914e5bfb8e6511d7d9bd9817de719b74251755d97fe97bf1')
+[2026-04-13 01:57:22] [ERROR] Query failed: INSERT INTO users (id,email,password) values (10,'andrewL@test.com','42caa4abb7b6f8f914e5bfb8e6511d7d9bd9817de719b74251755d97fe97bf1')
+[2026-04-13 02:50:01] [DEBUG] HTTP line: POST /api/register HTTP/1.1
+[2026-04-13 02:50:01] [DEBUG] HTTP line: Host: backend
+[2026-04-13 02:50:01] [DEBUG] HTTP line: Content-Length: 69
+[2026-04-13 02:50:01] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-13 02:50:01] [DEBUG] HTTP line: Accept: */*
+[2026-04-13 02:50:01] [DEBUG] HTTP line: Content-Type: application/json
+[2026-04-13 02:50:01] [DEBUG] HTTP line: 
+[2026-04-13 02:50:01] [DEBUG] HTTP line: {"id":2,"name":"Andrew","email":"andrew@test.com","password":"hash3"}
+[2026-04-13 02:50:01] [INFO] POST /api/register body={"id":2,"name":"Andrew","email":"andrew@test.com","password":"hash3"}
+[2026-04-13 02:50:01] [DEBUG] SQL: INSERT INTO users (id,name,email,password) values (2,'Andrew','andrew@test.com','42caa4abb7b6f8f914e5bfb8e6511d7d9bd9817de719b74251755d97fe97bf1')
+[2026-04-13 02:51:38] [DEBUG] HTTP line: POST /api/login HTTP/1.1
+[2026-04-13 02:51:38] [DEBUG] HTTP line: Host: backend
+[2026-04-13 02:51:38] [DEBUG] HTTP line: Content-Length: 50
+[2026-04-13 02:51:38] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-13 02:51:38] [DEBUG] HTTP line: Accept: */*
+[2026-04-13 02:51:38] [DEBUG] HTTP line: Content-Type: application/json
+[2026-04-13 02:51:38] [DEBUG] HTTP line: 
+[2026-04-13 02:51:38] [DEBUG] HTTP line: {"email”:”andrew@test.com","password":"hash3"}
+[2026-04-13 02:51:38] [INFO] POST /api/login body={"email”:”andrew@test.com","password":"hash3"}
+[2026-04-13 02:52:40] [DEBUG] HTTP line: POST /api/login HTTP/1.1
+[2026-04-13 02:52:40] [DEBUG] HTTP line: Host: backend
+[2026-04-13 02:52:40] [DEBUG] HTTP line: Content-Length: 46
+[2026-04-13 02:52:40] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-13 02:52:40] [DEBUG] HTTP line: Accept: */*
+[2026-04-13 02:52:40] [DEBUG] HTTP line: Content-Type: application/json
+[2026-04-13 02:52:40] [DEBUG] HTTP line: 
+[2026-04-13 02:52:40] [DEBUG] HTTP line: {"email":"andrew@test.com","password":"hash3"}
+[2026-04-13 02:52:40] [INFO] POST /api/login body={"email":"andrew@test.com","password":"hash3"}
+[2026-04-13 02:52:40] [DEBUG] SQL: SELECT id, name, email, password FROM users WHERE email='andrew@test.com'
+[2026-04-13 02:54:29] [DEBUG] HTTP line: POST /api/logout HTTP/1.1
+[2026-04-13 02:54:29] [DEBUG] HTTP line: Host: backend
+[2026-04-13 02:54:29] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-13 02:54:29] [DEBUG] HTTP line: Accept: */*
+[2026-04-13 02:54:29] [DEBUG] HTTP line: Authorization: Bearer YOUR_TOKEN_HERE
+[2026-04-13 02:54:29] [DEBUG] HTTP line: 
+[2026-04-13 02:54:29] [DEBUG] HTTP line: 
+[2026-04-13 02:57:16] [DEBUG] HTTP line: POST /api/logout HTTP/1.1
+[2026-04-13 02:57:16] [DEBUG] HTTP line: Host: backend
+[2026-04-13 02:57:16] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-13 02:57:16] [DEBUG] HTTP line: Accept: */*
+[2026-04-13 02:57:16] [DEBUG] HTTP line: Authorization: Bearer YOUR_TOKEN_HERE
+[2026-04-13 02:57:16] [DEBUG] HTTP line: 
+[2026-04-13 02:57:16] [DEBUG] HTTP line: 
+[2026-04-13 03:01:14] [DEBUG] HTTP line: POST /api/logout HTTP/1.1
+[2026-04-13 03:01:14] [DEBUG] HTTP line: Host: backend
+[2026-04-13 03:01:14] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-13 03:01:14] [DEBUG] HTTP line: Accept: */*
+[2026-04-13 03:01:14] [DEBUG] HTTP line: Authorization: Bearer YOUR_TOKEN_HERE
+[2026-04-13 03:01:14] [DEBUG] HTTP line: 
+[2026-04-13 03:01:14] [DEBUG] HTTP line: 
+[2026-04-13 03:02:21] [DEBUG] HTTP line: POST /api/logout HTTP/1.1
+[2026-04-13 03:02:21] [DEBUG] HTTP line: Host: backend
+[2026-04-13 03:02:21] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-13 03:02:21] [DEBUG] HTTP line: Accept: */*
+[2026-04-13 03:02:21] [DEBUG] HTTP line: Authorization: Bearer YOUR_TOKEN_HERE
+[2026-04-13 03:02:21] [DEBUG] HTTP line: 
+[2026-04-13 03:02:21] [DEBUG] HTTP line: 
+[2026-04-13 03:02:21] [DEBUG] SQL: SELECT user_id FROM sessions WHERE token='YOUR_TOKEN_HERE' AND expires_at > NOW()
+[2026-04-13 03:05:19] [DEBUG] HTTP line: POST /api/resources HTTP/1.1
+[2026-04-13 03:05:19] [DEBUG] HTTP line: Host: backend
+[2026-04-13 03:05:19] [DEBUG] HTTP line: Content-Length: 50
+[2026-04-13 03:05:19] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-13 03:05:19] [DEBUG] HTTP line: Accept: */*
+[2026-04-13 03:05:19] [DEBUG] HTTP line: Content-Type: application/json
+[2026-04-13 03:05:19] [DEBUG] HTTP line: Authorization: Bearer fa37JncCHryDsbzayy4cBWDxS22JjzhM
+[2026-04-13 03:05:19] [DEBUG] HTTP line: 
+[2026-04-13 03:05:19] [DEBUG] HTTP line: {"title":"First resource","content":"hello world"}
+[2026-04-13 03:05:19] [INFO] POST /api/resource body={"title":"First resource","content":"hello world"}
+[2026-04-13 03:05:43] [DEBUG] HTTP line: POST /api/resources HTTP/1.1
+[2026-04-13 03:05:43] [DEBUG] HTTP line: Host: backend
+[2026-04-13 03:05:43] [DEBUG] HTTP line: Content-Length: 57
+[2026-04-13 03:05:43] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-13 03:05:43] [DEBUG] HTTP line: Accept: */*
+[2026-04-13 03:05:43] [DEBUG] HTTP line: Content-Type: application/json
+[2026-04-13 03:05:43] [DEBUG] HTTP line: Authorization: Bearer fa37JncCHryDsbzayy4cBWDxS22JjzhM
+[2026-04-13 03:05:43] [DEBUG] HTTP line: 
+[2026-04-13 03:05:43] [DEBUG] HTTP line: {"id":2,"title":"First resource","content":"hello world"}
+[2026-04-13 03:05:43] [INFO] POST /api/resource body={"id":2,"title":"First resource","content":"hello world"}
+[2026-04-13 03:05:43] [DEBUG] SQL: INSERT INTO resources (user_id,id,title,content) values (2,2,'First resource','hello world')
+[2026-04-13 03:06:58] [DEBUG] HTTP line: POST /api/resources HTTP/1.1
+[2026-04-13 03:06:58] [DEBUG] HTTP line: Host: backend
+[2026-04-13 03:06:58] [DEBUG] HTTP line: Content-Length: 63
+[2026-04-13 03:06:58] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-13 03:06:58] [DEBUG] HTTP line: Accept: */*
+[2026-04-13 03:06:58] [DEBUG] HTTP line: Content-Type: application/json
+[2026-04-13 03:06:58] [DEBUG] HTTP line: Authorization: Bearer fa37JncCHryDsbzayy4cBWDxS22JjzhM
+[2026-04-13 03:06:58] [DEBUG] HTTP line: 
+[2026-04-13 03:06:58] [DEBUG] HTTP line: {"id":1,"title":"Second resource","content":"Hello Melancolie"}
+[2026-04-13 03:06:58] [INFO] POST /api/resource body={"id":1,"title":"Second resource","content":"Hello Melancolie"}
+[2026-04-13 03:06:58] [DEBUG] SQL: INSERT INTO resources (user_id,id,title,content) values (2,1,'Second resource','Hello Melancolie')
+[2026-04-13 03:08:39] [DEBUG] HTTP line: GET /api/resources?id=1 HTTP/1.1
+[2026-04-13 03:08:39] [DEBUG] HTTP line: Host: backend
+[2026-04-13 03:08:39] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-13 03:08:39] [DEBUG] HTTP line: Accept: */*
+[2026-04-13 03:08:39] [DEBUG] HTTP line: 
+[2026-04-13 03:08:39] [INFO] GET /api/resources
+[2026-04-13 03:08:39] [DEBUG] SQL: SELECT id, title, content FROM resources WHERE user_id=2
+[2026-04-13 03:09:22] [DEBUG] HTTP line: GET /api/resources?id=1 HTTP/1.1
+[2026-04-13 03:09:22] [DEBUG] HTTP line: Host: backend
+[2026-04-13 03:09:22] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-13 03:09:22] [DEBUG] HTTP line: Accept: */*
+[2026-04-13 03:09:22] [DEBUG] HTTP line: 
+[2026-04-13 03:09:22] [INFO] GET /api/resources
+[2026-04-13 03:09:22] [DEBUG] SQL: SELECT id, title, content FROM resources WHERE user_id=2
+[2026-04-13 03:10:12] [DEBUG] HTTP line: GET /api/resources?id=1 HTTP/1.1
+[2026-04-13 03:10:12] [DEBUG] HTTP line: Host: backend
+[2026-04-13 03:10:12] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-13 03:10:12] [DEBUG] HTTP line: Accept: */*
+[2026-04-13 03:10:12] [DEBUG] HTTP line: Authorization: Bearer fa37JncCHryDsbzayy4cBWDxS22JjzhM
+[2026-04-13 03:10:12] [DEBUG] HTTP line: 
+[2026-04-13 03:10:12] [INFO] GET /api/resources
+[2026-04-13 03:10:12] [DEBUG] SQL: SELECT id, title, content FROM resources WHERE user_id=2
+[2026-04-13 03:12:27] [DEBUG] HTTP line: POST /api/resources HTTP/1.1
+[2026-04-13 03:12:27] [DEBUG] HTTP line: Host: backend
+[2026-04-13 03:12:27] [DEBUG] HTTP line: Content-Length: 70
+[2026-04-13 03:12:27] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-13 03:12:27] [DEBUG] HTTP line: Accept: */*
+[2026-04-13 03:12:27] [DEBUG] HTTP line: Content-Type: application/json
+[2026-04-13 03:12:27] [DEBUG] HTTP line: Authorization: Bearer fa37JncCHryDsbzayy4cBWDxS22JjzhM
+[2026-04-13 03:12:27] [DEBUG] HTTP line: 
+[2026-04-13 03:12:27] [DEBUG] HTTP line: {"id":2,"title":"First resource--a test case","content":"hello world"}
+[2026-04-13 03:12:27] [INFO] POST /api/resource body={"id":2,"title":"First resource--a test case","content":"hello world"}
+[2026-04-13 03:12:27] [DEBUG] SQL: INSERT INTO resources (user_id,id,title,content) values (2,2,'First resource--a test case','hello world')
+[2026-04-13 03:12:27] [ERROR] Query failed: INSERT INTO resources (user_id,id,title,content) values (2,2,'First resource--a test case','hello world')
+[2026-04-13 03:12:52] [DEBUG] HTTP line: PUT /api/resources HTTP/1.1
+[2026-04-13 03:12:52] [DEBUG] HTTP line: Host: backend
+[2026-04-13 03:12:52] [DEBUG] HTTP line: Content-Length: 70
+[2026-04-13 03:12:52] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-13 03:12:52] [DEBUG] HTTP line: Accept: */*
+[2026-04-13 03:12:52] [DEBUG] HTTP line: Content-Type: application/json
+[2026-04-13 03:12:52] [DEBUG] HTTP line: Authorization: Bearer fa37JncCHryDsbzayy4cBWDxS22JjzhM
+[2026-04-13 03:12:52] [DEBUG] HTTP line: 
+[2026-04-13 03:12:52] [DEBUG] HTTP line: {"id":2,"title":"First resource--a test case","content":"hello world"}
+[2026-04-13 03:12:52] [INFO] PUT /api/resource body={"id":2,"title":"First resource--a test case","content":"hello world"}
+[2026-04-13 03:12:52] [DEBUG] SQL: UPDATE resources SET id=2,title='First resource--a test case',content='hello world' WHERE user_id=2
+[2026-04-13 03:12:52] [ERROR] Query failed: UPDATE resources SET id=2,title='First resource--a test case',content='hello world' WHERE user_id=2
+[2026-04-13 03:15:17] [DEBUG] HTTP line: PUT /api/resources HTTP/1.1
+[2026-04-13 03:15:17] [DEBUG] HTTP line: Host: backend
+[2026-04-13 03:15:17] [DEBUG] HTTP line: Content-Length: 68
+[2026-04-13 03:15:17] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-13 03:15:17] [DEBUG] HTTP line: Accept: */*
+[2026-04-13 03:15:17] [DEBUG] HTTP line: Content-Type: application/json
+[2026-04-13 03:15:17] [DEBUG] HTTP line: Authorization: Bearer fa37JncCHryDsbzayy4cBWDxS22JjzhM
+[2026-04-13 03:15:17] [DEBUG] HTTP line: 
+[2026-04-13 03:15:17] [DEBUG] HTTP line: {"id":2,"title":"First resourcea test case","content":"hello world"}
+[2026-04-13 03:15:17] [INFO] PUT /api/resource body={"id":2,"title":"First resourcea test case","content":"hello world"}
+[2026-04-13 03:15:17] [DEBUG] SQL: UPDATE resources SET id=2,title='First resourcea test case',content='hello world' WHERE user_id=2
+[2026-04-13 03:15:17] [ERROR] Query failed: UPDATE resources SET id=2,title='First resourcea test case',content='hello world' WHERE user_id=2
+[2026-04-13 03:21:44] [DEBUG] HTTP line: PUT /api/resources HTTP/1.1
+[2026-04-13 03:21:44] [DEBUG] HTTP line: Host: backend
+[2026-04-13 03:21:44] [DEBUG] HTTP line: Content-Length: 68
+[2026-04-13 03:21:44] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-13 03:21:44] [DEBUG] HTTP line: Accept: */*
+[2026-04-13 03:21:44] [DEBUG] HTTP line: Content-Type: application/json
+[2026-04-13 03:21:44] [DEBUG] HTTP line: Authorization: Bearer fa37JncCHryDsbzayy4cBWDxS22JjzhM
+[2026-04-13 03:21:44] [DEBUG] HTTP line: 
+[2026-04-13 03:21:44] [DEBUG] HTTP line: {"id":2,"title":"First resourcea test case","content":"hello world"}
+[2026-04-13 03:21:44] [INFO] PUT /api/resource body={"id":2,"title":"First resourcea test case","content":"hello world"}
+[2026-04-13 03:21:44] [DEBUG] SQL: UPDATE resources SET title='First resourcea test case',content='hello world' WHERE user_id=2 AND id=2
+[2026-04-13 03:21:59] [DEBUG] HTTP line: PUT /api/resources HTTP/1.1
+[2026-04-13 03:21:59] [DEBUG] HTTP line: Host: backend
+[2026-04-13 03:21:59] [DEBUG] HTTP line: Content-Length: 68
+[2026-04-13 03:21:59] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-13 03:21:59] [DEBUG] HTTP line: Accept: */*
+[2026-04-13 03:21:59] [DEBUG] HTTP line: Content-Type: application/json
+[2026-04-13 03:21:59] [DEBUG] HTTP line: Authorization: Bearer fa37JncCHryDsbzayy4cBWDxS22JjzhM
+[2026-04-13 03:21:59] [DEBUG] HTTP line: 
+[2026-04-13 03:21:59] [DEBUG] HTTP line: {"id":2,"title":"First resource- test case","content":"hello world"}
+[2026-04-13 03:21:59] [INFO] PUT /api/resource body={"id":2,"title":"First resource- test case","content":"hello world"}
+[2026-04-13 03:21:59] [DEBUG] SQL: UPDATE resources SET id=2,title='First resource- test case',content='hello world' WHERE user_id=2
+[2026-04-13 03:21:59] [ERROR] Query failed: UPDATE resources SET id=2,title='First resource- test case',content='hello world' WHERE user_id=2
+[2026-04-13 03:22:06] [DEBUG] HTTP line: PUT /api/resources HTTP/1.1
+[2026-04-13 03:22:06] [DEBUG] HTTP line: Host: backend
+[2026-04-13 03:22:06] [DEBUG] HTTP line: Content-Length: 67
+[2026-04-13 03:22:06] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-13 03:22:06] [DEBUG] HTTP line: Accept: */*
+[2026-04-13 03:22:06] [DEBUG] HTTP line: Content-Type: application/json
+[2026-04-13 03:22:06] [DEBUG] HTTP line: Authorization: Bearer fa37JncCHryDsbzayy4cBWDxS22JjzhM
+[2026-04-13 03:22:06] [DEBUG] HTTP line: 
+[2026-04-13 03:22:06] [DEBUG] HTTP line: {"id":2,"title":"First resource-test case","content":"hello world"}
+[2026-04-13 03:22:06] [INFO] PUT /api/resource body={"id":2,"title":"First resource-test case","content":"hello world"}
+[2026-04-13 03:22:06] [DEBUG] SQL: UPDATE resources SET title='First resource-test case',content='hello world' WHERE user_id=2 AND id=2
+[2026-04-13 03:26:39] [DEBUG] HTTP line: GET /api/resources HTTP/1.1
+[2026-04-13 03:26:39] [DEBUG] HTTP line: Host: backend
+[2026-04-13 03:26:39] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-13 03:26:39] [DEBUG] HTTP line: Accept: */*
+[2026-04-13 03:26:39] [DEBUG] HTTP line: Authorization: Bearer fa37JncCHryDsbzayy4cBWDxS22JjzhM
+[2026-04-13 03:26:39] [DEBUG] HTTP line: 
+[2026-04-13 03:26:39] [INFO] GET /api/resources
+[2026-04-13 03:26:39] [DEBUG] SQL: SELECT id, title, content FROM resources WHERE user_id=2
+[2026-04-13 03:28:00] [DEBUG] HTTP line: DELETE /api/resource?id=1 HTTP/1.1
+[2026-04-13 03:28:00] [DEBUG] HTTP line: Host: backend
+[2026-04-13 03:28:00] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-13 03:28:00] [DEBUG] HTTP line: Accept: */*
+[2026-04-13 03:28:00] [DEBUG] HTTP line: 
+[2026-04-13 03:28:45] [DEBUG] HTTP line: GET /api/resources?id=1 HTTP/1.1
+[2026-04-13 03:28:45] [DEBUG] HTTP line: Host: backend
+[2026-04-13 03:28:45] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-13 03:28:45] [DEBUG] HTTP line: Accept: */*
+[2026-04-13 03:28:45] [DEBUG] HTTP line: Authorization: Bearer fa37JncCHryDsbzayy4cBWDxS22JjzhM
+[2026-04-13 03:28:45] [DEBUG] HTTP line: 
+[2026-04-13 03:28:45] [INFO] GET /api/resources
+[2026-04-13 03:28:45] [DEBUG] SQL: SELECT id, title, content FROM resources WHERE user_id=2
+[2026-04-13 03:29:50] [DEBUG] HTTP line: DELETE /api/resources?id=1 HTTP/1.1
+[2026-04-13 03:29:50] [DEBUG] HTTP line: Host: backend
+[2026-04-13 03:29:50] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-13 03:29:50] [DEBUG] HTTP line: Accept: */*
+[2026-04-13 03:29:50] [DEBUG] HTTP line: Authorization: Bearer fa37JncCHryDsbzayy4cBWDxS22JjzhM
+[2026-04-13 03:29:50] [DEBUG] HTTP line: 
+[2026-04-13 03:29:50] [INFO] DELETE /api/resource?id=1
+[2026-04-13 03:29:50] [DEBUG] SQL: DELETE FROM resources WHERE id=1And user_id=2
+[2026-04-13 03:29:50] [ERROR] Query failed: DELETE FROM resources WHERE id=1And user_id=2
+[2026-04-13 03:32:36] [DEBUG] HTTP line: DELETE /api/resources?id=1 HTTP/1.1
+[2026-04-13 03:32:36] [DEBUG] HTTP line: Host: backend
+[2026-04-13 03:32:36] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-13 03:32:36] [DEBUG] HTTP line: Accept: */*
+[2026-04-13 03:32:36] [DEBUG] HTTP line: Authorization: Bearer fa37JncCHryDsbzayy4cBWDxS22JjzhM
+[2026-04-13 03:32:36] [DEBUG] HTTP line: 
+[2026-04-13 03:32:36] [INFO] DELETE /api/resource?id=1
+[2026-04-13 03:32:36] [DEBUG] SQL: DELETE FROM resources WHERE id=1And user_id=2
+[2026-04-13 03:32:36] [ERROR] Query failed: DELETE FROM resources WHERE id=1And user_id=2
+[2026-04-13 03:32:56] [DEBUG] HTTP line: DELETE /api/resources?id=1 HTTP/1.1
+[2026-04-13 03:32:56] [DEBUG] HTTP line: Host: backend
+[2026-04-13 03:32:56] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-13 03:32:56] [DEBUG] HTTP line: Accept: */*
+[2026-04-13 03:32:56] [DEBUG] HTTP line: Authorization: Bearer fa37JncCHryDsbzayy4cBWDxS22JjzhM
+[2026-04-13 03:32:56] [DEBUG] HTTP line: 
+[2026-04-13 03:32:56] [INFO] DELETE /api/resource?id=1
+[2026-04-13 03:32:56] [DEBUG] SQL: DELETE FROM resources WHERE id=1 And user_id=2
+[2026-04-13 03:33:34] [DEBUG] HTTP line: DELETE /api/resources?id=1 HTTP/1.1
+[2026-04-13 03:33:34] [DEBUG] HTTP line: Host: backend
+[2026-04-13 03:33:34] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-13 03:33:34] [DEBUG] HTTP line: Accept: */*
+[2026-04-13 03:33:34] [DEBUG] HTTP line: Authorization: Bearer fa37JncCHryDsbzayy4cBWDxS22JjzhM
+[2026-04-13 03:33:34] [DEBUG] HTTP line: 
+[2026-04-13 03:33:34] [INFO] DELETE /api/resource?id=1
+[2026-04-13 03:33:34] [DEBUG] SQL: DELETE FROM resources WHERE id=1And user_id=2
+[2026-04-13 03:33:34] [ERROR] Query failed: DELETE FROM resources WHERE id=1And user_id=2
+[2026-04-13 03:34:10] [DEBUG] HTTP line: DELETE /api/resources?id=2 HTTP/1.1
+[2026-04-13 03:34:10] [DEBUG] HTTP line: Host: backend
+[2026-04-13 03:34:10] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-13 03:34:10] [DEBUG] HTTP line: Accept: */*
+[2026-04-13 03:34:10] [DEBUG] HTTP line: Authorization: Bearer fa37JncCHryDsbzayy4cBWDxS22JjzhM
+[2026-04-13 03:34:10] [DEBUG] HTTP line: 
+[2026-04-13 03:34:10] [INFO] DELETE /api/resource?id=2
+[2026-04-13 03:34:10] [DEBUG] SQL: DELETE FROM resources WHERE id=2 And user_id=2
+[2026-04-13 03:34:53] [DEBUG] HTTP line: POST /api/logout HTTP/1.1
+[2026-04-13 03:34:53] [DEBUG] HTTP line: Host: backend
+[2026-04-13 03:34:53] [DEBUG] HTTP line: User-Agent: curl/8.7.1
+[2026-04-13 03:34:53] [DEBUG] HTTP line: Accept: */*
+[2026-04-13 03:34:53] [DEBUG] HTTP line: Authorization: Bearer fa37JncCHryDsbzayy4cBWDxS22JjzhM
+[2026-04-13 03:34:53] [DEBUG] HTTP line: 
+[2026-04-13 03:34:53] [DEBUG] HTTP line: 
