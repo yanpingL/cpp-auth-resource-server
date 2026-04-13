@@ -96,14 +96,12 @@ private:
     // ===== RESTful API =====
     HTTP_CODE handle_get_resources();
     void parse_query(char* query_string, std::string& key, std::string& value);
-    bool add_json_type();
-
-    // helper function for POST method
-    HTTP_CODE handle_post_content(char * text);
-    // helper function for PUT method
-    HTTP_CODE handle_put_content(char * text);
     // helper fuction for DELETE method
     HTTP_CODE handle_delete_resource();
+    // helper function for POST method
+    HTTP_CODE handle_post_resource(char * text);
+    // helper function for PUT method
+    HTTP_CODE handle_put_resource(char * text);
     
     HTTP_CODE handle_login(char* text);
     HTTP_CODE handle_logout();
@@ -154,7 +152,7 @@ private:
 
     std::string json_res;                   // string to store the JSON format result
     int apireq;                            // check if it's api request
-    HTTP_CODE api_ret;                       // private variable to record the api request HTTP_CODE
+    // HTTP_CODE api_ret;                       // private variable to record the api request HTTP_CODE
     
 
     char m_write_buf[ WRITE_BUFFER_SIZE ];  // 写缓冲区

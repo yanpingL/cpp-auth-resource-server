@@ -1,9 +1,10 @@
 #include "http_conn.h"
 #include "connection_pool.h"
 #include "user_service.h"
+#include "resource_service.h"
+#include "user_dao.h"
 #include "logger.h"
 #include "auth_utils.h"
-#include "user_dao.h"
 
 // Define some stat info of the HTTP response
 const char* ok_200_title = "OK";
@@ -134,7 +135,6 @@ void http_conn::init(){
 
     json_res = "";
     apireq = 0;
-    // api_ret = NO_REQUEST;
 
     memset(m_read_buf, 0, READ_BUFFER_SIZE);
     memset(m_write_buf, 0, READ_BUFFER_SIZE);
@@ -356,20 +356,11 @@ http_conn::HTTP_CODE http_conn::parse_headers(char * text){
             m_check_stat = CHECK_STATE_CONTENT;
             return NO_REQUEST;
         }
-        // if (apireq == 3 && m_method == POST){
-        //     m_check_stat = CHECK_STATE_CONTENT;
-        //     return NO_REQUEST;
-        // }
-        // if (apireq == 4 && m_method == POST){
-        //     m_check_stat = CHECK_STATE_CONTENT;
-        //     return NO_REQUEST;
-        // }
-
         
-        // if (m_content_length != 0 ) {
-        //     m_check_stat = CHECK_STATE_CONTENT;
-        //     return NO_REQUEST; // request incomplete, still need to parse the body
-        // }
+        if (m_content_length != 0 ) {
+            m_check_stat = CHECK_STATE_CONTENT;
+            return NO_REQUEST; // request incomplete, still need to parse the body
+        }
         
         // file request
         return GET_REQUEST;
@@ -420,18 +411,14 @@ http_conn::HTTP_CODE http_conn::parse_content(char * text){
     {   
         // ensure string end
         text[ m_content_length ] = '\0';
-
         // need to parse the content with POST method
         if (apireq == 1){
-            if (m_method == GET){
-                // ===========
-            } else if (m_method == POST){
+            if (m_method == POST){
                 return handle_post_resource(text);
             } else if(m_method == PUT){ 
                 return handle_put_resource(text);
-            } else if (m_method == DELETE){
-                return handle_delete_resource(text);
             }
+
         } else if (m_method == POST && apireq == 2){
             return handle_login(text);
         } else if (m_method == POST && apireq == 3){
@@ -469,42 +456,17 @@ should be invalid, change to get_resource
 http_conn::HTTP_CODE http_conn::handle_get_resources(){
 
     // protect API
-    int user_id = UserDAO::get_user_id_from_token(token);
-    if (user_id == nullopt) {
+    std::optional<int> user_id = UserDAO::get_user_id_from_token(token);
+    if (user_id == std::nullopt) {
         json_res = "{\"error\":\"unauthorized\"}";
         Logger::get_instance()->log(ERROR, "unauthorized");
         return FORBIDDEN_REQUEST;
     }
 
-    //parse query 
-    char* query = strchr(m_url, '?');
-    std::string id = "unkonw";
-
-    if (query){
-        *query++ = '\0';
-        std::string key, value;
-        parse_query(query, key, value);
-
-        if (key != "id") {
-            json_res = "{\"error\":\"invalid param\"}";
-            Logger::get_instance()->log(ERROR, "invalid param");
-            return BAD_REQUEST;
-        } else {
-            id = value;
-        }
-    }
-
-    // validate the request ID
-    if (!std::all_of(id.begin(), id.end(), ::isdigit)) {
-        json_res = "{\"error\":\"invalid id\"}";
-        Logger::get_instance()->log(ERROR, "Invalid ID");
-        return BAD_REQUEST;
-    }
-
     // UserService layer to handle the service request
     // the user_dao called inside the UserService handle the data layer
     Logger::get_instance()->log(INFO, "GET /api/resources");
-    json res = ResourcesService::get_resources(user_id);
+    json res = ResourceService::get_resources(user_id.value());
 
     json_res = res.dump();
     if (res.contains("error")){
@@ -512,7 +474,6 @@ http_conn::HTTP_CODE http_conn::handle_get_resources(){
     } else {
         return GET_RESOURCE;
     }
-    
 }
 
 
@@ -524,8 +485,8 @@ shoudl be delete resource
 http_conn::HTTP_CODE http_conn::handle_delete_resource(){
 
     // protect API
-    int user_id = UserDAO::get_user_id_from_token(token);
-    if (user_id == nullopt) {
+    std::optional<int> user_id = UserDAO::get_user_id_from_token(token);
+    if (user_id == std::nullopt) {
         json_res = "{\"error\":\"unauthorized\"}";
         Logger::get_instance()->log(ERROR, "unauthorized");
         return FORBIDDEN_REQUEST;
@@ -541,12 +502,12 @@ http_conn::HTTP_CODE http_conn::handle_delete_resource(){
 
     // validate id
     if (key != "id" || !std::all_of(value.begin(), value.end(), ::isdigit)){
-        json_res = "{\"error\":\"invalid id\"}";
+        json_res = "{\"error\":\"invalid parameter\"}";
         return BAD_REQUEST;
     }
 
     Logger::get_instance()->log(INFO, "DELETE /api/resource?id=" + value);
-    json res = ResourceService::delete_resource(user_id, atoi(value.c_str()));
+    json res = ResourceService::delete_resource(user_id.value(), atoi(value.c_str()));
     json_res = res.dump();
 
     if (res.contains("error")){
@@ -557,13 +518,21 @@ http_conn::HTTP_CODE http_conn::handle_delete_resource(){
 }
 
 
-http_conn::HTTP_CODE http_conn::handle_post_content(char * text){
+http_conn::HTTP_CODE http_conn::handle_post_resource(char * text){
+
+    // protect API
+    std::optional<int> user_id = UserDAO::get_user_id_from_token(token);
+    if (user_id == std::nullopt) {
+        json_res = "{\"error\":\"unauthorized\"}";
+        Logger::get_instance()->log(ERROR, "unauthorized");
+        return FORBIDDEN_REQUEST;
+    }
     
     // extract body
     std::string body(text);
     // debug
     std::cout << "Body: " << body << std::endl;
-    Logger::get_instance()->log(INFO, "POST /api/user body=" + body);
+    Logger::get_instance()->log(INFO, "POST /api/resource body=" + body);
 
     // next step: parse JSON
     json j = json::parse(body);
@@ -573,12 +542,13 @@ http_conn::HTTP_CODE http_conn::handle_post_content(char * text){
         json_res = "{\"error\":\"invalid id\"}";
         return BAD_REQUEST;
     }
-    int id = j["id"];
     
     // add the user resource back to db
-    std::set<std::string> allowed = {"id", "name", "email", "password"};
+    std::set<std::string> allowed = {"id", "title", "content"};
     std::string cols;
     std::string values;
+    cols += "user_id,";
+    values += std::to_string(user_id.value()) + ",";
 
     for (auto it = j.begin(); it != j.end(); ++it){
         std::string key = it.key();
@@ -593,39 +563,33 @@ http_conn::HTTP_CODE http_conn::handle_post_content(char * text){
             values += it.value().dump() + ",";
         } else if (it.value().is_string()){
             std::string val = it.value();
-
-            // ✅ hash password only
-            if (key == "password") {
-                val = sha256(val);
-            }
-
             values += "'" + val + "',";
         }
     }
-
+    
     if(!cols.empty()) cols.pop_back();
     if(!values.empty()) values.pop_back();
 
-    std::string sql =  std::string("INSERT INTO users ") + 
+    std::string sql =  std::string("INSERT INTO resources ") + 
                         "(" + cols + ") values (" + values + ")";
     Logger::get_instance()->log(DEBUG, "SQL: " + sql);
 
-    json res = UserService::create_user(sql);
+    json res = ResourceService::create_resource(sql);
     json_res = res.dump();
     if (res.contains("error")){
         return BAD_REQUEST;
     } else {
         return ADD_RESOURCE;
     }
-
 }
 
 
 // PUT METHOD
-http_conn::HTTP_CODE http_conn::handle_put_content(char* text){
+http_conn::HTTP_CODE http_conn::handle_put_resource(char* text){
 
     // protect API
-    if (!UserDAO::validate_token(token)) {
+    std::optional<int> user_id = UserDAO::get_user_id_from_token(token);
+    if (user_id == std::nullopt) {
         json_res = "{\"error\":\"unauthorized\"}";
         Logger::get_instance()->log(ERROR, "unauthorized");
         return FORBIDDEN_REQUEST;
@@ -634,7 +598,7 @@ http_conn::HTTP_CODE http_conn::handle_put_content(char* text){
     // debug
     std::string body(text);
     std::cout << "PUT Body: " << body << std::endl;
-    Logger::get_instance()->log(INFO, "PUT /api/user body=" + body);
+    Logger::get_instance()->log(INFO, "PUT /api/resource body=" + body);
 
     json j = json::parse(body);
 
@@ -647,10 +611,9 @@ http_conn::HTTP_CODE http_conn::handle_put_content(char* text){
 
     // 2. build SET clause
     std::string set_clause;
-    // add the user resource back to db
-    std::set<std::string> allowed = {"name", "email", "password"};
+    std::set<std::string> allowed = {"id", "title", "content"};
 
-    for (auto it = j.begin(); it != j.end();++it){
+    for (auto it = j.begin(); it != j.end(); ++it){
         std::string key = it.key();
 
         if(key == "id" || !allowed.count(key)) continue;
@@ -671,11 +634,12 @@ http_conn::HTTP_CODE http_conn::handle_put_content(char* text){
     set_clause.pop_back(); // remove last comma
 
     // 4. build SQL
-    std::string sql = std::string("UPDATE users SET ") 
-                        + set_clause + " WHERE id=" + std::to_string(id);
+    std::string sql = std::string("UPDATE resources SET ") 
+                        + set_clause + " WHERE user_id=" + std::to_string(user_id.value()) + 
+                        " AND id=" +  std::to_string(id);
     Logger::get_instance()->log(DEBUG, "SQL: " + sql);
     
-    json res = UserService::update_user(sql);
+    json res = ResourceService::update_resource(sql);
     json_res = res.dump();
 
     if (res.contains("error")){
@@ -717,6 +681,12 @@ http_conn::HTTP_CODE http_conn::handle_login(char* text) {
 
 // logout
 http_conn::HTTP_CODE http_conn::handle_logout() {
+    // validdate token
+    if (!UserDAO::validate_token(token)) {
+        json_res = "{\"error\":\"invalid token\"}";
+        return FORBIDDEN_REQUEST;
+    }
+
 
     if (token.empty()) {
         json_res = "{\"error\":\"no token\"}";
@@ -751,7 +721,6 @@ http_conn::HTTP_CODE http_conn::handle_register(char * text){
             json_res = "{\"error\":\"invalid id\"}";
             return BAD_REQUEST;
         }
-        int id = j["id"];
         
         // add the user resource back to db
         std::set<std::string> allowed = {"id", "name", "email", "password"};
@@ -1021,7 +990,7 @@ bool http_conn::process_write(HTTP_CODE ret) {
             break;
         case BAD_REQUEST:
             add_status_line(400, error_400_title);
-            if (apireq  == 1 && !json_res.empty()) {
+            if (!json_res.empty()) {
                 add_headers(json_res.size(), "application/json");
                 if (!add_content(json_res.c_str())) {
                     return false;

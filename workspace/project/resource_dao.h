@@ -1,5 +1,7 @@
 #ifndef RESORUCE_DAO_H
 #define RESORUCE_DAO_H
+#include <string>
+#include <vector>
 
 struct Resource {
     int id;

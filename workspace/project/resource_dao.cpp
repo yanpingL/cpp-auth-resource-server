@@ -32,7 +32,6 @@ bool ResourceDAO::create_resource(const std::string& sql){
 
 std::vector<Resource> ResourceDAO::get_resources(int user_id){
      std::vector<Resource> res;
-     // get the shared single instance 
      connection_pool* pool = connection_pool::get_instance();
      MYSQL* conn = pool->get_connection();
  
@@ -56,7 +55,7 @@ std::vector<Resource> ResourceDAO::get_resources(int user_id){
  
      MYSQL_RES* result = mysql_store_result(conn);
      if (!result){
-         msg = std::string("Query failed.");
+         msg = std::string("Result not found.");
          Logger::get_instance()->log(ERROR, msg);
          pool->release_connection(conn);
          return res;
@@ -103,7 +102,7 @@ bool ResourceDAO::update_resource(const std::string& sql){
 
     bool success = mysql_affected_rows(conn) > 0;
     if (!success) {
-        msg = std::string("Resource not found.");
+        msg = std::string("No change proceeded.");
         Logger::get_instance()->log(ERROR, msg);
     }    
     pool->release_connection(conn);
@@ -119,10 +118,9 @@ bool ResourceDAO::delete_resource(int user_id, int id){
         msg = std::string("DB connection failed.");
         return false;
     }
-    // Need to change the name of the DB to make it changeable 
     std::string sql =
-        "DELETE FROM resources WHERE id=" + std::to_string(id)
-        "And user_id=" + std::to_string(user_id);
+        "DELETE FROM resources WHERE id=" + std::to_string(id) + 
+        " And user_id=" + std::to_string(user_id);
         
     Logger::get_instance()->log(DEBUG, "SQL: " + sql);
 
