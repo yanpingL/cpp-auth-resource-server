@@ -6,7 +6,7 @@
 #include <exception>
 #include <iostream>
 #include "locker.h"
-#include "logger.h"
+#include "utils/logger.h"
 
 // threadpool class, defined as template to enable the reuse of codes
 // T is the task class

@@ -1,7 +1,7 @@
 #include "user_dao.h"
-#include "connection_pool.h"
-#include "logger.h"
-#include "redis_client.h"
+#include "db/connection_pool.h"
+#include "utils/logger.h"
+#include "cache/redis_client.h"
 
 #include <mysql/mysql.h>
 #include <iostream>

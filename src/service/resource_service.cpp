@@ -1,6 +1,6 @@
 #include "resource_service.h"
-#include "resource_dao.h"
-#include "user_dao.h"
+#include "dao/resource_dao.h"
+#include "dao/user_dao.h"
 
 res_json ResourceService::create_resource(const std::string& sql){
 

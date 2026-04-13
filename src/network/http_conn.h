@@ -15,7 +15,6 @@
 #include <sys/mman.h>
 #include <stdarg.h>
 #include <errno.h>
-#include "locker.h"
 #include <sys/uio.h>
 #include <cstring>
 #include <string.h>
@@ -25,6 +24,7 @@
 #include <nlohmann/json.hpp>
 #include <mysql/mysql.h>
 #include <set>
+#include "thread/locker.h"
 
 using json = nlohmann::ordered_json;
 

@@ -1,6 +1,6 @@
 #include "resource_dao.h"
-#include "connection_pool.h"
-#include "logger.h"
+#include "db/connection_pool.h"
+#include "utils/logger.h"
 
 #include <mysql/mysql.h>
 #include <iostream>

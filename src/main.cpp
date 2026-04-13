@@ -12,12 +12,12 @@
 #include <signal.h>
 #include <libgen.h>
 
-#include "locker.h"
-#include "threadpool.h"
-#include "http_conn.h"
-#include "connection_pool.h"
-#include "logger.h"
-#include "redis_client.h"
+#include "thread/locker.h"
+#include "thread/threadpool.h"
+#include "network/http_conn.h"
+#include "db/connection_pool.h"
+#include "utils/logger.h"
+#include "cache/redis_client.h"
 
 
 

@@ -1,10 +1,10 @@
 #include "http_conn.h"
-#include "connection_pool.h"
-#include "user_service.h"
-#include "resource_service.h"
-#include "user_dao.h"
-#include "logger.h"
-#include "auth_utils.h"
+#include "db/connection_pool.h"
+#include "service/user_service.h"
+#include "service/resource_service.h"
+#include "dao/user_dao.h"
+#include "utils/logger.h"
+#include "utils/auth_utils.h"
 
 // Define some stat info of the HTTP response
 const char* ok_200_title = "OK";
@@ -18,8 +18,8 @@ const char* error_500_title = "Internal Error";
 const char* error_500_form = "There was an unusual problem serving the requested file.\n";
 
 
-// roote directory of the website (need update)
-const char* doc_root = "/workspace/project/resources";
+// Root directory for static files inside the Docker/container workspace.
+const char* doc_root = "/workspace/src/resources";
 
 /*
 - setnonblock()

@@ -4,8 +4,8 @@
 #include <mysql/mysql.h>
 #include <queue>
 #include <string>
-#include "locker.h"
-#include "logger.h"
+#include "thread/locker.h"
+#include "utils/logger.h"
 
 class connection_pool {
 public:

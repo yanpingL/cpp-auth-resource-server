@@ -1,7 +1,7 @@
 #include "user_service.h"
-#include "user_dao.h"
-#include "auth_utils.h"
-#include "redis_client.h"
+#include "dao/user_dao.h"
+#include "utils/auth_utils.h"
+#include "cache/redis_client.h"
 
 json_type UserService::get_user(int id) {
     auto user_opt = UserDAO::get_user_by_id(id);

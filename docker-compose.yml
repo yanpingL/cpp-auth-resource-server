@@ -1,27 +1,43 @@
 services:
   web1:
+    build:
+      context: .
+      dockerfile: Dockerfile
     image: webserver-web-dev:latest
     container_name: sys-web-1
+    working_dir: /workspace
     volumes:
-      - ./workspace:/workspace
+      - ./:/workspace
     depends_on:
       - mysql
       - redis
     ports:
       - "8081:8080"
+    # command: >
+    #   bash -lc "cmake -S . -B build &&
+    #   cmake --build build &&
+    #   ./build/bin/webserver 8080"
     stdin_open: true
     tty: true
   
   web2:
+    build:
+      context: .
+      dockerfile: Dockerfile
     image: webserver-web-dev:latest
     container_name: sys-web-2
+    working_dir: /workspace
     volumes:
-      - ./workspace:/workspace
+      - ./:/workspace
     depends_on:
       - mysql
       - redis
     ports:
       - "8082:8080"
+    # command: >
+    #   bash -lc "cmake -S . -B build &&
+    #   cmake --build build &&
+    #   ./build/bin/webserver 8080"
     stdin_open: true
     tty: true
 
@@ -31,7 +47,7 @@ services:
     ports:
       - "8080:80"
     volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
       - web1
       - web2
