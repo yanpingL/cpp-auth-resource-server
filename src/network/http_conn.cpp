@@ -534,8 +534,20 @@ http_conn::HTTP_CODE http_conn::handle_post_resource(char * text){
     std::cout << "Body: " << body << std::endl;
     Logger::get_instance()->log(INFO, "POST /api/resource body=" + body);
 
-    // next step: parse JSON
-    json j = json::parse(body);
+    try {
+        // next step: parse JSON
+        json j = json::parse(body);
+    } catch(const json::parse_error& e){
+        // malformed JSON
+        json_res = "{\"error\":\"invalid JSON format\"}";
+        return BAD_REQUEST;
+    } catch (...){
+        // other unexpected errors
+        json_res = "{\"error\":\"internal error\"}";
+        return INTERNAL_ERROR;
+    }
+
+    
 
     // validate id
     if (!j.contains("id") || !j["id"].is_number_integer()){
@@ -600,7 +612,18 @@ http_conn::HTTP_CODE http_conn::handle_put_resource(char* text){
     std::cout << "PUT Body: " << body << std::endl;
     Logger::get_instance()->log(INFO, "PUT /api/resource body=" + body);
 
-    json j = json::parse(body);
+    try {
+        // next step: parse JSON
+        json j = json::parse(body);
+    } catch(const json::parse_error& e){
+        // malformed JSON
+        json_res = "{\"error\":\"invalid JSON format\"}";
+        return BAD_REQUEST;
+    } catch (...){
+        // other unexpected errors
+        json_res = "{\"error\":\"internal error\"}";
+        return INTERNAL_ERROR;
+    }
 
     // 1. validate id
     if (!j.contains("id") || !j["id"].is_number_integer()){
@@ -656,7 +679,19 @@ http_conn::HTTP_CODE http_conn::handle_login(char* text) {
     std::string body(text);
     Logger::get_instance()->log(INFO, "POST /api/login body=" + body);
 
-    json j = json::parse(body);
+    try {
+        // next step: parse JSON
+        json j = json::parse(body);
+    } catch(const json::parse_error& e){
+        // malformed JSON
+        json_res = "{\"error\":\"invalid JSON format\"}";
+        return BAD_REQUEST;
+    } catch (...){
+        // other unexpected errors
+        json_res = "{\"error\":\"internal error\"}";
+        return INTERNAL_ERROR;
+    }
+
 
     if (!j.contains("email") || !j.contains("password")) {
         json_res = "{\"error\":\"missing fields\"}";
@@ -713,8 +748,19 @@ http_conn::HTTP_CODE http_conn::handle_register(char * text){
         std::cout << "Body: " << body << std::endl;
         Logger::get_instance()->log(INFO, "POST /api/register body=" + body);
     
-        // next step: parse JSON
-        json j = json::parse(body);
+        try {
+            // next step: parse JSON
+            json j = json::parse(body);
+        } catch(const json::parse_error& e){
+            // malformed JSON
+            json_res = "{\"error\":\"invalid JSON format\"}";
+            return BAD_REQUEST;
+        } catch (...){
+            // other unexpected errors
+            json_res = "{\"error\":\"internal error\"}";
+            return INTERNAL_ERROR;
+        }
+
     
         // validate id
         if (!j.contains("id") || !j["id"].is_number_integer()){
@@ -1086,6 +1132,7 @@ bool http_conn::write(){
 
     while(1) {
         // wirte distributely
+        // writev() is non-blocking 
         temp = writev(m_sockfd, m_iv, m_iv_count);
 
         if (temp <= -1) {
