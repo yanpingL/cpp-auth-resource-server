@@ -20,7 +20,7 @@ res_json ResourceService::get_resources(int user_id){
      auto vec = ResourceDAO::get_resources(user_id);
      
      res_json res;
-     if (!vec.size()){
+     if (!ResourceDAO::msg.empty()){
           res["error"] = ResourceDAO::msg;
           return res;
      }
@@ -65,6 +65,5 @@ res_json ResourceService::delete_resource(int user_id, int id){
      }
      return res;  
 }
-
 
 

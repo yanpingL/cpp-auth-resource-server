@@ -3,8 +3,9 @@
 
 #include <string>
 #include <sstream>
+#include <iomanip>
 #include <openssl/sha.h>
-#include <cstdlib>
+#include <openssl/rand.h>
 
 // ===== SHA256 =====
 inline std::string sha256(const std::string& input) {
@@ -13,21 +14,23 @@ inline std::string sha256(const std::string& input) {
 
     std::stringstream ss;
     for (int i = 0; i < SHA256_DIGEST_LENGTH; i++) {
-        ss << std::hex << (int)hash[i];
+        ss << std::hex << std::setw(2) << std::setfill('0') << (int)hash[i];
     }
     return ss.str();
 }
 
 // ===== TOKEN =====
 inline std::string generate_token() {
-    static const char alphanum[] =
-        "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
-
-    std::string token;
-    for (int i = 0; i < 32; ++i) {
-        token += alphanum[rand() % (sizeof(alphanum) - 1)];
+    unsigned char bytes[32];
+    if (RAND_bytes(bytes, sizeof(bytes)) != 1) {
+        return "";
     }
-    return token;
+
+    std::stringstream ss;
+    for (unsigned char byte : bytes) {
+        ss << std::hex << std::setw(2) << std::setfill('0') << (int)byte;
+    }
+    return ss.str();
 }
 
 #endif

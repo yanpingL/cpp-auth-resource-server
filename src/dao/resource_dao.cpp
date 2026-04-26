@@ -32,6 +32,7 @@ bool ResourceDAO::create_resource(const std::string& sql){
 
 std::vector<Resource> ResourceDAO::get_resources(int user_id){
      std::vector<Resource> res;
+     msg.clear();
      connection_pool* pool = connection_pool::get_instance();
      MYSQL* conn = pool->get_connection();
  
@@ -43,7 +44,6 @@ std::vector<Resource> ResourceDAO::get_resources(int user_id){
 
      std::string sql = 
          "SELECT id, title, content FROM resources WHERE user_id=" + std::to_string(user_id);
-     Logger::get_instance()->log(DEBUG, "SQL: " + sql);
 
      
      if(mysql_query(conn, sql.c_str())){
@@ -71,11 +71,6 @@ std::vector<Resource> ResourceDAO::get_resources(int user_id){
         res.push_back(r);
     }
 
-     if (!res.size()){
-         msg = std::string("result not found.");
-         Logger::get_instance()->log(ERROR, msg);
-     }
- 
      mysql_free_result(result);
      pool->release_connection(conn);
  

@@ -111,6 +111,7 @@ void http_conn::init(int sockfd, const sockaddr_in &addr){
     // make the port be reused in TIME_WAIT
     // not allow multiple active servers bind to same port
     setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
+    m_user_count++;
     // add to epoll instance
     addfd(m_epollfd, m_sockfd, 1);
 
@@ -121,7 +122,7 @@ void http_conn::init(int sockfd, const sockaddr_in &addr){
 // initialize other infos
 void http_conn::init(){
     m_check_stat = CHECK_STATE_REQUESTLINE;  // initialize the state as parse the first line of request
-    m_linger = false;
+    m_linger = true;
 
     m_method = GET; // default request method
     m_url = 0;
@@ -132,13 +133,17 @@ void http_conn::init(){
     m_start_line = 0;
     m_read_index = 0;
     m_write_index = 0;
+    m_file_address = 0;
+    m_iv_count = 0;
 
     json_res = "";
     apireq = 0;
 
     memset(m_read_buf, 0, READ_BUFFER_SIZE);
-    memset(m_write_buf, 0, READ_BUFFER_SIZE);
+    memset(m_write_buf, 0, WRITE_BUFFER_SIZE);
     memset(m_real_file, 0, FILENAME_LEN);
+    memset(&m_file_stat, 0, sizeof(m_file_stat));
+    memset(m_iv, 0, sizeof(m_iv));
 }
 
 
@@ -239,6 +244,9 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char * text){
     // put the pointer to the position of the first appearance of the specified character
     // blank space or \t --> tab character
     m_url = strpbrk(text, " \t");
+    if (!m_url) {
+        return BAD_REQUEST;
+    }
     // fill the first ' ' as '\0' and move the pointer 1 position forward
     *m_url++ = '\0';
     char *method = text; // GET
@@ -372,6 +380,8 @@ http_conn::HTTP_CODE http_conn::parse_headers(char * text){
         text += strspn( text, " \t" );
         if ( strcasecmp( text, "keep-alive" ) == 0 ) {
             m_linger = true;
+        } else if ( strcasecmp( text, "close" ) == 0 ) {
+            m_linger = false;
         }
 
     } else if ( strncasecmp( text, "Content-Length:", 15 ) == 0 ) {
@@ -396,8 +406,6 @@ http_conn::HTTP_CODE http_conn::parse_headers(char * text){
         if (auth.find("Bearer ") == 0) {
             token = auth.substr(7);
         }
-    } else {
-        std::cout << "Oops! Unknown header " << text << std::endl;
     }
     // still incomplete
     return NO_REQUEST;
@@ -534,9 +542,10 @@ http_conn::HTTP_CODE http_conn::handle_post_resource(char * text){
     std::cout << "Body: " << body << std::endl;
     Logger::get_instance()->log(INFO, "POST /api/resource body=" + body);
 
+    json j;
     try {
         // next step: parse JSON
-        json j = json::parse(body);
+        j = json::parse(body);
     } catch(const json::parse_error& e){
         // malformed JSON
         json_res = "{\"error\":\"invalid JSON format\"}";
@@ -611,10 +620,11 @@ http_conn::HTTP_CODE http_conn::handle_put_resource(char* text){
     std::string body(text);
     std::cout << "PUT Body: " << body << std::endl;
     Logger::get_instance()->log(INFO, "PUT /api/resource body=" + body);
+    json j;
 
     try {
         // next step: parse JSON
-        json j = json::parse(body);
+        j = json::parse(body);
     } catch(const json::parse_error& e){
         // malformed JSON
         json_res = "{\"error\":\"invalid JSON format\"}";
@@ -679,9 +689,10 @@ http_conn::HTTP_CODE http_conn::handle_login(char* text) {
     std::string body(text);
     Logger::get_instance()->log(INFO, "POST /api/login body=" + body);
 
+    json j;
     try {
         // next step: parse JSON
-        json j = json::parse(body);
+        j = json::parse(body);
     } catch(const json::parse_error& e){
         // malformed JSON
         json_res = "{\"error\":\"invalid JSON format\"}";
@@ -748,9 +759,10 @@ http_conn::HTTP_CODE http_conn::handle_register(char * text){
         std::cout << "Body: " << body << std::endl;
         Logger::get_instance()->log(INFO, "POST /api/register body=" + body);
     
+        json j;
         try {
             // next step: parse JSON
-            json j = json::parse(body);
+            j = json::parse(body);
         } catch(const json::parse_error& e){
             // malformed JSON
             json_res = "{\"error\":\"invalid JSON format\"}";
@@ -825,10 +837,6 @@ http_conn::HTTP_CODE http_conn::process_read(){
         // or parse the request body also complete data 
         text = get_line();
         m_start_line = m_checked_index; // move pointer to the poition needs to be parsed
-        // std::cout << "got 1 http line: " << text << std::endl;
-        Logger::get_instance()->log(DEBUG,
-            std::string("HTTP line: ") + text);
-
         switch(m_check_stat){
             // parse a line
             // at this state, we never return unless BAD_REQUEST detected
@@ -991,10 +999,10 @@ bool http_conn::add_status_line( int status, const char* title ) {
 
 
 bool http_conn::add_headers(int content_len, const char* type) {
-    add_content_length(content_len);
-    add_content_type(type);
-    add_linger();
-    add_blank_line();
+    return add_content_length(content_len)
+        && add_content_type(type)
+        && add_linger()
+        && add_blank_line();
 }
 
 
@@ -1119,7 +1127,7 @@ bool http_conn::write(){
     int temp = 0;
     int bytes_have_send = 0;  // bytes already sent
     // int bytes_to_send = m_write_index; //bytes wait to be sent 
-    int bytes_to_send = m_iv[0].iov_len + m_iv[1].iov_len; //bytes wait to be sent 
+    int bytes_to_send = m_iv[0].iov_len + (m_iv_count == 2 ? m_iv[1].iov_len : 0); //bytes wait to be sent 
 
     if(bytes_to_send == 0) {
         // bytes wait to be sent is 0, response terminates

@@ -66,7 +66,7 @@ int main(int argc, char* argv[]){
     // creat thread pool and initiate the pool
     threadpool<http_conn> * pool = NULL;
     try{
-        pool = new threadpool<http_conn>;
+        pool = new threadpool<http_conn>(10, 10000);
     } catch(...){
         exit(-1);
     }
@@ -110,7 +110,7 @@ int main(int argc, char* argv[]){
     // check error
 
     // listen
-    ret = listen(listenfd, 5);
+    ret = listen(listenfd, 4096);
 
     // epoll
     // create epoll instance, and the array of events, add the fd

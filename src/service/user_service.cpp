@@ -93,6 +93,10 @@ json_type UserService::login(const std::string& email, const std::string& passwo
 
     // generate token (simple version)
     std::string token = generate_token();
+    if (token.empty()) {
+        res["error"] = "token generation failed";
+        return res;
+    }
 
     // Redis store (main)
     RedisClient::get_instance()->set(
@@ -114,4 +118,3 @@ json_type UserService::login(const std::string& email, const std::string& passwo
 
     return res;
 }
-

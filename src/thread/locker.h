@@ -88,8 +88,16 @@ public:
         }
     }
 
+    sem(const sem&) = delete;
+    sem& operator=(const sem&) = delete;
+
     ~sem(){
         sem_destroy(&m_sem);
+    }
+
+    bool init(int num) {
+        sem_destroy(&m_sem);
+        return sem_init(&m_sem, 0, num) == 0;
     }
 
     //the signal to decrement the value of sem
