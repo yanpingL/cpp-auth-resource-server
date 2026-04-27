@@ -58,7 +58,10 @@ void connection_pool::init(std::string url, std::string user,
         conn_list.push(conn);
         free_conn++;
     }
-    reserve = sem(free_conn);
+    if (!reserve.init(free_conn)) {
+        Logger::get_instance()->log(ERROR, "Semaphore init error");
+        exit(1);
+    }
 }
 
 

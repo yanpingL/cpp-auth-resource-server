@@ -21,6 +21,7 @@ set(WEBSERVER_SOURCES
     src/db/connection_pool.cpp
     src/network/http_conn.cpp
     src/service/resource_service.cpp
+    src/service/storage_service.cpp
     src/service/user_service.cpp
     src/utils/logger.cpp
 )
@@ -40,6 +41,7 @@ target_include_directories(${PROJECT_NAME}
 # - PkgConfig: used here to discover hiredis and MySQL/MariaDB client libs
 find_package(Threads REQUIRED)
 find_package(OpenSSL REQUIRED)
+find_package(CURL REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(PkgConfig REQUIRED)
 
@@ -66,7 +68,26 @@ target_link_libraries(${PROJECT_NAME}
     PRIVATE
         Threads::Threads
         OpenSSL::Crypto
+        CURL::libcurl
         nlohmann_json::nlohmann_json
         PkgConfig::HIREDIS
         PkgConfig::MYSQLCLIENT
 )
+
+enable_testing()
+
+add_executable(unit_tests
+    tests/unit_tests.cpp
+)
+
+target_include_directories(unit_tests
+    PRIVATE
+        ${PROJECT_SOURCE_DIR}/src
+)
+
+target_link_libraries(unit_tests
+    PRIVATE
+        OpenSSL::Crypto
+)
+
+add_test(NAME unit_tests COMMAND unit_tests)

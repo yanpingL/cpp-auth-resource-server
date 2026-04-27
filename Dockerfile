@@ -18,10 +18,11 @@ RUN apt-get update -o Acquire::Retries=5 && \
       man-db \
       manpages \
       manpages-dev \
-      nlohmann-json3-dev \
-      libmysqlclient-dev \
-      libhiredis-dev \
-      libssl-dev \
+	      nlohmann-json3-dev \
+	      libmysqlclient-dev \
+	      libhiredis-dev \
+	      libcurl4-openssl-dev \
+	      libssl-dev \
     && yes | unminimize \
     && rm -rf /var/lib/apt/lists/*
 

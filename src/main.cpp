@@ -66,7 +66,7 @@ int main(int argc, char* argv[]){
     // creat thread pool and initiate the pool
     threadpool<http_conn> * pool = NULL;
     try{
-        pool = new threadpool<http_conn>;
+        pool = new threadpool<http_conn>(10, 10000);
     } catch(...){
         exit(-1);
     }
@@ -95,7 +95,7 @@ int main(int argc, char* argv[]){
     // check error
 
     // set socket complexing before bind
-    // ✅ Allow the socket to reuse a local address (IP + port) immediately.
+    // Allow the socket to reuse a local address (IP + port) immediately.
     // handle the TIME_WAIT mechanisme
     int reuse = 1; // represent to reuse the port
     setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
@@ -110,7 +110,7 @@ int main(int argc, char* argv[]){
     // check error
 
     // listen
-    ret = listen(listenfd, 5);
+    ret = listen(listenfd, 4096);
 
     // epoll
     // create epoll instance, and the array of events, add the fd
@@ -131,7 +131,7 @@ int main(int argc, char* argv[]){
             break;
         }
 
-        // repeatly scan the events array
+        // repeatly scan the active events array
         for (int i = 0; i < num; ++i) {
             int sockfd = events[i].data.fd;
             if (sockfd == listenfd) {

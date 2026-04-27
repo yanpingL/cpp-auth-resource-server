@@ -32,6 +32,7 @@ bool ResourceDAO::create_resource(const std::string& sql){
 
 std::vector<Resource> ResourceDAO::get_resources(int user_id){
      std::vector<Resource> res;
+     msg.clear();
      connection_pool* pool = connection_pool::get_instance();
      MYSQL* conn = pool->get_connection();
  
@@ -41,9 +42,8 @@ std::vector<Resource> ResourceDAO::get_resources(int user_id){
         return res;
      }
 
-     std::string sql = 
-         "SELECT id, title, content FROM resources WHERE user_id=" + std::to_string(user_id);
-     Logger::get_instance()->log(DEBUG, "SQL: " + sql);
+     std::string sql =
+         "SELECT id, title, content, is_file FROM resources WHERE user_id=" + std::to_string(user_id);
 
      
      if(mysql_query(conn, sql.c_str())){
@@ -67,19 +67,66 @@ std::vector<Resource> ResourceDAO::get_resources(int user_id){
         r.id = atoi(row[0]);
         r.title = row[1] ? row[1] : "";
         r.content = row[2] ? row[2] : "";
+        r.is_file = row[3] && atoi(row[3]) != 0;
 
         res.push_back(r);
     }
 
-     if (!res.size()){
-         msg = std::string("result not found.");
-         Logger::get_instance()->log(ERROR, msg);
-     }
- 
      mysql_free_result(result);
      pool->release_connection(conn);
  
      return res;
+}
+
+
+std::optional<Resource> ResourceDAO::get_resource(int user_id, int id){
+    msg.clear();
+    connection_pool* pool = connection_pool::get_instance();
+    MYSQL* conn = pool->get_connection();
+
+    if (!conn) {
+        msg = std::string("DB connection failed.");
+        Logger::get_instance()->log(ERROR, msg);
+        return std::nullopt;
+    }
+
+    std::string sql =
+        "SELECT id, title, content, is_file FROM resources WHERE user_id=" +
+        std::to_string(user_id) + " AND id=" + std::to_string(id);
+
+    if (mysql_query(conn, sql.c_str())) {
+        msg = std::string("Query failed.");
+        Logger::get_instance()->log(ERROR, msg);
+        pool->release_connection(conn);
+        return std::nullopt;
+    }
+
+    MYSQL_RES* result = mysql_store_result(conn);
+    if (!result) {
+        msg = std::string("Result not found.");
+        Logger::get_instance()->log(ERROR, msg);
+        pool->release_connection(conn);
+        return std::nullopt;
+    }
+
+    MYSQL_ROW row = mysql_fetch_row(result);
+    if (!row) {
+        msg = std::string("Resource not found.");
+        Logger::get_instance()->log(ERROR, msg);
+        mysql_free_result(result);
+        pool->release_connection(conn);
+        return std::nullopt;
+    }
+
+    Resource r;
+    r.id = atoi(row[0]);
+    r.title = row[1] ? row[1] : "";
+    r.content = row[2] ? row[2] : "";
+    r.is_file = row[3] && atoi(row[3]) != 0;
+
+    mysql_free_result(result);
+    pool->release_connection(conn);
+    return r;
 }
 
 

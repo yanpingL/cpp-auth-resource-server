@@ -2,9 +2,13 @@
 #include "db/connection_pool.h"
 #include "service/user_service.h"
 #include "service/resource_service.h"
+#include "service/storage_service.h"
 #include "dao/user_dao.h"
 #include "utils/logger.h"
 #include "utils/auth_utils.h"
+
+#include <algorithm>
+#include <cctype>
 
 // Define some stat info of the HTTP response
 const char* ok_200_title = "OK";
@@ -111,6 +115,7 @@ void http_conn::init(int sockfd, const sockaddr_in &addr){
     // make the port be reused in TIME_WAIT
     // not allow multiple active servers bind to same port
     setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
+    m_user_count++;
     // add to epoll instance
     addfd(m_epollfd, m_sockfd, 1);
 
@@ -121,7 +126,7 @@ void http_conn::init(int sockfd, const sockaddr_in &addr){
 // initialize other infos
 void http_conn::init(){
     m_check_stat = CHECK_STATE_REQUESTLINE;  // initialize the state as parse the first line of request
-    m_linger = false;
+    m_linger = true;
 
     m_method = GET; // default request method
     m_url = 0;
@@ -132,13 +137,18 @@ void http_conn::init(){
     m_start_line = 0;
     m_read_index = 0;
     m_write_index = 0;
+    m_file_address = 0;
+    m_iv_count = 0;
 
     json_res = "";
+    token.clear();
     apireq = 0;
 
     memset(m_read_buf, 0, READ_BUFFER_SIZE);
-    memset(m_write_buf, 0, READ_BUFFER_SIZE);
+    memset(m_write_buf, 0, WRITE_BUFFER_SIZE);
     memset(m_real_file, 0, FILENAME_LEN);
+    memset(&m_file_stat, 0, sizeof(m_file_stat));
+    memset(m_iv, 0, sizeof(m_iv));
 }
 
 
@@ -239,6 +249,9 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char * text){
     // put the pointer to the position of the first appearance of the specified character
     // blank space or \t --> tab character
     m_url = strpbrk(text, " \t");
+    if (!m_url) {
+        return BAD_REQUEST;
+    }
     // fill the first ' ' as '\0' and move the pointer 1 position forward
     *m_url++ = '\0';
     char *method = text; // GET
@@ -281,6 +294,12 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char * text){
     }
     if(strncmp(m_url, "/api/register", 13) == 0){
         apireq = 4;
+    }
+    if(strncmp(m_url, "/api/files/upload-url", 21) == 0){
+        apireq = 5;
+    }
+    if(strncmp(m_url, "/api/files/download-url", 23) == 0){
+        apireq = 6;
     }
 
     // request to the user owned resources
@@ -352,7 +371,10 @@ http_conn::HTTP_CODE http_conn::parse_headers(char * text){
                 return handle_get_resources();
             } 
         }
-        if (m_method == POST && (apireq == 2 || apireq == 3 || apireq == 4)){
+        if (apireq == 6 && m_method == GET){
+            return handle_create_download_url();
+        }
+        if (m_method == POST && (apireq == 2 || apireq == 3 || apireq == 4 || apireq == 5)){
             m_check_stat = CHECK_STATE_CONTENT;
             return NO_REQUEST;
         }
@@ -372,6 +394,8 @@ http_conn::HTTP_CODE http_conn::parse_headers(char * text){
         text += strspn( text, " \t" );
         if ( strcasecmp( text, "keep-alive" ) == 0 ) {
             m_linger = true;
+        } else if ( strcasecmp( text, "close" ) == 0 ) {
+            m_linger = false;
         }
 
     } else if ( strncasecmp( text, "Content-Length:", 15 ) == 0 ) {
@@ -396,8 +420,6 @@ http_conn::HTTP_CODE http_conn::parse_headers(char * text){
         if (auth.find("Bearer ") == 0) {
             token = auth.substr(7);
         }
-    } else {
-        std::cout << "Oops! Unknown header " << text << std::endl;
     }
     // still incomplete
     return NO_REQUEST;
@@ -425,6 +447,8 @@ http_conn::HTTP_CODE http_conn::parse_content(char * text){
             return handle_logout();
         } else if (m_method == POST && apireq == 4){
             return handle_register(text);
+        } else if (m_method == POST && apireq == 5){
+            return handle_create_upload_url(text);
         }
         return GET_REQUEST;
     }
@@ -463,10 +487,25 @@ http_conn::HTTP_CODE http_conn::handle_get_resources(){
         return FORBIDDEN_REQUEST;
     }
 
+    char* query = strchr(m_url, '?');
+    std::string key, value;
+    if (query) {
+        *query++ = '\0';
+        parse_query(query, key, value);
+
+        if (key != "id" || value.empty() ||
+            !std::all_of(value.begin(), value.end(), ::isdigit)) {
+            json_res = "{\"error\":\"invalid parameter\"}";
+            return BAD_REQUEST;
+        }
+    }
+
     // UserService layer to handle the service request
     // the user_dao called inside the UserService handle the data layer
     Logger::get_instance()->log(INFO, "GET /api/resources");
-    json res = ResourceService::get_resources(user_id.value());
+    json res = key == "id"
+        ? ResourceService::get_resource(user_id.value(), atoi(value.c_str()))
+        : ResourceService::get_resources(user_id.value());
 
     json_res = res.dump();
     if (res.contains("error")){
@@ -534,8 +573,21 @@ http_conn::HTTP_CODE http_conn::handle_post_resource(char * text){
     std::cout << "Body: " << body << std::endl;
     Logger::get_instance()->log(INFO, "POST /api/resource body=" + body);
 
-    // next step: parse JSON
-    json j = json::parse(body);
+    json j;
+    try {
+        // next step: parse JSON
+        j = json::parse(body);
+    } catch(const json::parse_error& e){
+        // malformed JSON
+        json_res = "{\"error\":\"invalid JSON format\"}";
+        return BAD_REQUEST;
+    } catch (...){
+        // other unexpected errors
+        json_res = "{\"error\":\"internal error\"}";
+        return INTERNAL_ERROR;
+    }
+
+    
 
     // validate id
     if (!j.contains("id") || !j["id"].is_number_integer()){
@@ -543,8 +595,13 @@ http_conn::HTTP_CODE http_conn::handle_post_resource(char * text){
         return BAD_REQUEST;
     }
     
+    if (j.contains("is_file") && !j["is_file"].is_boolean()){
+        json_res = "{\"error\":\"invalid is_file\"}";
+        return BAD_REQUEST;
+    }
+
     // add the user resource back to db
-    std::set<std::string> allowed = {"id", "title", "content"};
+    std::set<std::string> allowed = {"id", "title", "content", "is_file"};
     std::string cols;
     std::string values;
     cols += "user_id,";
@@ -559,7 +616,9 @@ http_conn::HTTP_CODE http_conn::handle_post_resource(char * text){
         cols += key + ",";
 
         // number 
-        if(it.value().is_number()){
+        if (key == "is_file"){
+            values += it.value().get<bool>() ? "1," : "0,";
+        } else if(it.value().is_number()){
             values += it.value().dump() + ",";
         } else if (it.value().is_string()){
             std::string val = it.value();
@@ -599,8 +658,20 @@ http_conn::HTTP_CODE http_conn::handle_put_resource(char* text){
     std::string body(text);
     std::cout << "PUT Body: " << body << std::endl;
     Logger::get_instance()->log(INFO, "PUT /api/resource body=" + body);
+    json j;
 
-    json j = json::parse(body);
+    try {
+        // next step: parse JSON
+        j = json::parse(body);
+    } catch(const json::parse_error& e){
+        // malformed JSON
+        json_res = "{\"error\":\"invalid JSON format\"}";
+        return BAD_REQUEST;
+    } catch (...){
+        // other unexpected errors
+        json_res = "{\"error\":\"internal error\"}";
+        return INTERNAL_ERROR;
+    }
 
     // 1. validate id
     if (!j.contains("id") || !j["id"].is_number_integer()){
@@ -656,7 +727,20 @@ http_conn::HTTP_CODE http_conn::handle_login(char* text) {
     std::string body(text);
     Logger::get_instance()->log(INFO, "POST /api/login body=" + body);
 
-    json j = json::parse(body);
+    json j;
+    try {
+        // next step: parse JSON
+        j = json::parse(body);
+    } catch(const json::parse_error& e){
+        // malformed JSON
+        json_res = "{\"error\":\"invalid JSON format\"}";
+        return BAD_REQUEST;
+    } catch (...){
+        // other unexpected errors
+        json_res = "{\"error\":\"internal error\"}";
+        return INTERNAL_ERROR;
+    }
+
 
     if (!j.contains("email") || !j.contains("password")) {
         json_res = "{\"error\":\"missing fields\"}";
@@ -705,6 +789,80 @@ http_conn::HTTP_CODE http_conn::handle_logout() {
 }
 
 
+http_conn::HTTP_CODE http_conn::handle_create_upload_url(char* text) {
+    std::optional<int> user_id = UserDAO::get_user_id_from_token(token);
+    if (user_id == std::nullopt) {
+        json_res = "{\"error\":\"unauthorized\"}";
+        Logger::get_instance()->log(ERROR, "unauthorized");
+        return FORBIDDEN_REQUEST;
+    }
+
+    std::string body(text);
+    Logger::get_instance()->log(INFO, "POST /api/files/upload-url body=" + body);
+
+    json j;
+    try {
+        j = json::parse(body);
+    } catch (const json::parse_error& e) {
+        json_res = "{\"error\":\"invalid JSON format\"}";
+        return BAD_REQUEST;
+    } catch (...) {
+        json_res = "{\"error\":\"internal error\"}";
+        return INTERNAL_ERROR;
+    }
+
+    if (!j.contains("filename") || !j["filename"].is_string() ||
+        !j.contains("content_type") || !j["content_type"].is_string()) {
+        json_res = "{\"error\":\"missing fields\"}";
+        return BAD_REQUEST;
+    }
+
+    json res = StorageService::create_upload_url(
+        user_id.value(),
+        j["filename"].get<std::string>(),
+        j["content_type"].get<std::string>());
+
+    json_res = res.dump();
+    if (res.contains("error")) {
+        return BAD_REQUEST;
+    }
+    return GET_RESOURCE;
+}
+
+
+http_conn::HTTP_CODE http_conn::handle_create_download_url() {
+    std::optional<int> user_id = UserDAO::get_user_id_from_token(token);
+    if (user_id == std::nullopt) {
+        json_res = "{\"error\":\"unauthorized\"}";
+        Logger::get_instance()->log(ERROR, "unauthorized");
+        return FORBIDDEN_REQUEST;
+    }
+
+    char* query = strchr(m_url, '?');
+    std::string key, value;
+    if (query) {
+        *query++ = '\0';
+        parse_query(query, key, value);
+    }
+
+    if (key != "resource_id" || value.empty() ||
+        !std::all_of(value.begin(), value.end(), ::isdigit)) {
+        json_res = "{\"error\":\"invalid parameter\"}";
+        return BAD_REQUEST;
+    }
+
+    json res = ResourceService::get_file_download_url(
+        user_id.value(),
+        atoi(value.c_str()));
+
+    json_res = res.dump();
+    if (res.contains("error")) {
+        return BAD_REQUEST;
+    }
+    return GET_RESOURCE;
+}
+
+
 // register
 http_conn::HTTP_CODE http_conn::handle_register(char * text){
         // extract body
@@ -713,12 +871,31 @@ http_conn::HTTP_CODE http_conn::handle_register(char * text){
         std::cout << "Body: " << body << std::endl;
         Logger::get_instance()->log(INFO, "POST /api/register body=" + body);
     
-        // next step: parse JSON
-        json j = json::parse(body);
+        json j;
+        try {
+            // next step: parse JSON
+            j = json::parse(body);
+        } catch(const json::parse_error& e){
+            // malformed JSON
+            json_res = "{\"error\":\"invalid JSON format\"}";
+            return BAD_REQUEST;
+        } catch (...){
+            // other unexpected errors
+            json_res = "{\"error\":\"internal error\"}";
+            return INTERNAL_ERROR;
+        }
+
     
         // validate id
         if (!j.contains("id") || !j["id"].is_number_integer()){
             json_res = "{\"error\":\"invalid id\"}";
+            return BAD_REQUEST;
+        }
+
+        if (!j.contains("name") || !j["name"].is_string() ||
+            !j.contains("email") || !j["email"].is_string() ||
+            !j.contains("password") || !j["password"].is_string()) {
+            json_res = "{\"error\":\"missing fields\"}";
             return BAD_REQUEST;
         }
         
@@ -779,10 +956,6 @@ http_conn::HTTP_CODE http_conn::process_read(){
         // or parse the request body also complete data 
         text = get_line();
         m_start_line = m_checked_index; // move pointer to the poition needs to be parsed
-        // std::cout << "got 1 http line: " << text << std::endl;
-        Logger::get_instance()->log(DEBUG,
-            std::string("HTTP line: ") + text);
-
         switch(m_check_stat){
             // parse a line
             // at this state, we never return unless BAD_REQUEST detected
@@ -945,10 +1118,10 @@ bool http_conn::add_status_line( int status, const char* title ) {
 
 
 bool http_conn::add_headers(int content_len, const char* type) {
-    add_content_length(content_len);
-    add_content_type(type);
-    add_linger();
-    add_blank_line();
+    return add_content_length(content_len)
+        && add_content_type(type)
+        && add_linger()
+        && add_blank_line();
 }
 
 
@@ -979,6 +1152,22 @@ bool http_conn::add_content( const char* content )
 
 // write the response to the write buffer
 bool http_conn::process_write(HTTP_CODE ret) {
+    auto add_json_response = [this](int status, const char* title) {
+        if (!add_status_line(status, title)) {
+            return false;
+        }
+        if (!add_headers(json_res.size(), "application/json")) {
+            return false;
+        }
+
+        m_iv[0].iov_base = m_write_buf;
+        m_iv[0].iov_len = m_write_index;
+        m_iv[1].iov_base = const_cast<char*>(json_res.c_str());
+        m_iv[1].iov_len = json_res.size();
+        m_iv_count = 2;
+        return true;
+    };
+
     switch (ret)
     {
         case INTERNAL_ERROR:
@@ -989,13 +1178,10 @@ bool http_conn::process_write(HTTP_CODE ret) {
             }
             break;
         case BAD_REQUEST:
-            add_status_line(400, error_400_title);
             if (!json_res.empty()) {
-                add_headers(json_res.size(), "application/json");
-                if (!add_content(json_res.c_str())) {
-                    return false;
-                }
+                return add_json_response(400, error_400_title);
             } else {
+                add_status_line(400, error_400_title);
                 add_headers(strlen(error_400_form), "text");
                 if (!add_content(error_400_form)) {
                     return false;
@@ -1027,34 +1213,13 @@ bool http_conn::process_write(HTTP_CODE ret) {
             m_iv_count = 2;
             return true;
         case GET_RESOURCE:
-            add_status_line(200, ok_200_title);
-            add_headers(json_res.size(), "application/json");
-            add_content(json_res.c_str());
-            m_iv[0].iov_base = m_write_buf;
-            m_iv[0].iov_len = m_write_index;
-            m_iv_count = 1;
-            return true;
+            return add_json_response(200, ok_200_title);
         case ADD_RESOURCE:
-            add_status_line(200, ok_200_title);
-            add_headers(json_res.size(), "application/json");
-            add_content(json_res.c_str());
-            distribute_data();
-            m_iv_count = 1;
-            return true;
+            return add_json_response(200, ok_200_title);
         case UPDATE_RESOURCE:
-            add_status_line(200, ok_200_title);
-            add_headers(json_res.size(), "application/json");
-            add_content(json_res.c_str());
-            distribute_data();
-            m_iv_count = 1;
-            return true;
+            return add_json_response(200, ok_200_title);
         case DELETE_RESOURCE:
-            add_status_line(200, ok_200_title);
-            add_headers(json_res.size(), "application/json");
-            add_content(json_res.c_str());
-            distribute_data();
-            m_iv_count = 1;
-            return true;
+            return add_json_response(200, ok_200_title);
         default:
             return false;
     }
@@ -1073,7 +1238,7 @@ bool http_conn::write(){
     int temp = 0;
     int bytes_have_send = 0;  // bytes already sent
     // int bytes_to_send = m_write_index; //bytes wait to be sent 
-    int bytes_to_send = m_iv[0].iov_len + m_iv[1].iov_len; //bytes wait to be sent 
+    int bytes_to_send = m_iv[0].iov_len + (m_iv_count == 2 ? m_iv[1].iov_len : 0); //bytes wait to be sent 
 
     if(bytes_to_send == 0) {
         // bytes wait to be sent is 0, response terminates
@@ -1086,6 +1251,7 @@ bool http_conn::write(){
 
     while(1) {
         // wirte distributely
+        // writev() is non-blocking 
         temp = writev(m_sockfd, m_iv, m_iv_count);
 
         if (temp <= -1) {

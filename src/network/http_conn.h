@@ -106,6 +106,8 @@ private:
     HTTP_CODE handle_login(char* text);
     HTTP_CODE handle_logout();
     HTTP_CODE handle_register(char* text);
+    HTTP_CODE handle_create_upload_url(char* text);
+    HTTP_CODE handle_create_download_url();
 
 
 
@@ -142,24 +144,23 @@ private:
     METHOD m_method;   //request method
 
 
-    char m_real_file[ FILENAME_LEN ];       // 客户请求的目标文件的完整路径，其内容等于 doc_root + m_url, doc_root是网站根目录
-    char* m_url;                            // 客户请求的目标文件的文件名
-    char* m_version;                        // HTTP协议版本号，我们仅支持HTTP1.1
-    char* m_host;                           // 主机名
-    int m_content_length;                   // HTTP请求的消息总长度
-    bool m_linger;                          // HTTP请求是否要求保持连接
+    char m_real_file[ FILENAME_LEN ];       // the full path of the target file, doc_root + m_url, doc_root is the root directory of the website
+    char* m_url;                            // target file name requested by the client
+    char* m_version;                        // HTTP version, only support 1.1
+    char* m_host;                           // host name
+    int m_content_length;                   // total length of the HTTP request
+    bool m_linger;                          // whether keep the connection
     std::string token;                      // token 
 
     std::string json_res;                   // string to store the JSON format result
     int apireq;                            // check if it's api request
-    // HTTP_CODE api_ret;                       // private variable to record the api request HTTP_CODE
     
 
-    char m_write_buf[ WRITE_BUFFER_SIZE ];  // 写缓冲区
-    int m_write_index;                        // 写缓冲区中待发送的字节数
-    char* m_file_address;                   // 客户请求的目标文件被mmap到内存中的起始位置
-    struct stat m_file_stat;                // 目标文件的状态。通过它我们可以判断文件是否存在、是否为目录、是否可读，并获取文件大小等信息
-    struct iovec m_iv[2];                   // 我们将采用writev来执行写操作，所以定义下面两个成员，其中m_iv_count表示被写内存块的数量。
+    char m_write_buf[ WRITE_BUFFER_SIZE ];      //  write buffer
+    int m_write_index;                          // number of bytes waiting to be sent in the write buffer
+    char* m_file_address;                       // start position in the memory of the mmap file 
+    struct stat m_file_stat;                    //state of the target file, with which to check if the file exist, is dictionary or not, readable or note, file size
+    struct iovec m_iv[2];                       // use writev to write, m_iv_count represents the number of memory blocks
     int m_iv_count;    
 };
 

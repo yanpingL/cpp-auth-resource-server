@@ -20,8 +20,8 @@ bool UserDAO::create_user(const std::string& sql) {
     }
     bool success = (mysql_query(conn, sql.c_str()) == 0);
     if (!success) {
-        msg = std::string("Query failed.");
-        Logger::get_instance()->log(ERROR, "Query failed: " + sql);
+        msg = std::string("Query failed: ") + mysql_error(conn);
+        Logger::get_instance()->log(ERROR, msg + " SQL: " + sql);
     }
 
     pool->release_connection(conn);

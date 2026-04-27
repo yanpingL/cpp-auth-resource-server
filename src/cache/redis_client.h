@@ -3,6 +3,7 @@
 
 #include <hiredis/hiredis.h>
 #include <string>
+#include <mutex>
 
 class RedisClient {
 public:
@@ -16,8 +17,9 @@ public:
     bool del(const std::string& key);
 
 private:
-    RedisClient() {}
+    RedisClient() : context(nullptr) {}
     redisContext* context;
+    std::mutex mtx;
 };
 
 #endif
