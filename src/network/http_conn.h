@@ -106,6 +106,8 @@ private:
     HTTP_CODE handle_login(char* text);
     HTTP_CODE handle_logout();
     HTTP_CODE handle_register(char* text);
+    HTTP_CODE handle_create_upload_url(char* text);
+    HTTP_CODE handle_create_download_url();
 
 
 

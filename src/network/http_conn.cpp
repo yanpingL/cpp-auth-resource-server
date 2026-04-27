@@ -2,9 +2,13 @@
 #include "db/connection_pool.h"
 #include "service/user_service.h"
 #include "service/resource_service.h"
+#include "service/storage_service.h"
 #include "dao/user_dao.h"
 #include "utils/logger.h"
 #include "utils/auth_utils.h"
+
+#include <algorithm>
+#include <cctype>
 
 // Define some stat info of the HTTP response
 const char* ok_200_title = "OK";
@@ -137,6 +141,7 @@ void http_conn::init(){
     m_iv_count = 0;
 
     json_res = "";
+    token.clear();
     apireq = 0;
 
     memset(m_read_buf, 0, READ_BUFFER_SIZE);
@@ -290,6 +295,12 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char * text){
     if(strncmp(m_url, "/api/register", 13) == 0){
         apireq = 4;
     }
+    if(strncmp(m_url, "/api/files/upload-url", 21) == 0){
+        apireq = 5;
+    }
+    if(strncmp(m_url, "/api/files/download-url", 23) == 0){
+        apireq = 6;
+    }
 
     // request to the user owned resources
     if(strncmp(m_url, "/api/resources", 14) == 0){
@@ -360,7 +371,10 @@ http_conn::HTTP_CODE http_conn::parse_headers(char * text){
                 return handle_get_resources();
             } 
         }
-        if (m_method == POST && (apireq == 2 || apireq == 3 || apireq == 4)){
+        if (apireq == 6 && m_method == GET){
+            return handle_create_download_url();
+        }
+        if (m_method == POST && (apireq == 2 || apireq == 3 || apireq == 4 || apireq == 5)){
             m_check_stat = CHECK_STATE_CONTENT;
             return NO_REQUEST;
         }
@@ -433,6 +447,8 @@ http_conn::HTTP_CODE http_conn::parse_content(char * text){
             return handle_logout();
         } else if (m_method == POST && apireq == 4){
             return handle_register(text);
+        } else if (m_method == POST && apireq == 5){
+            return handle_create_upload_url(text);
         }
         return GET_REQUEST;
     }
@@ -471,10 +487,25 @@ http_conn::HTTP_CODE http_conn::handle_get_resources(){
         return FORBIDDEN_REQUEST;
     }
 
+    char* query = strchr(m_url, '?');
+    std::string key, value;
+    if (query) {
+        *query++ = '\0';
+        parse_query(query, key, value);
+
+        if (key != "id" || value.empty() ||
+            !std::all_of(value.begin(), value.end(), ::isdigit)) {
+            json_res = "{\"error\":\"invalid parameter\"}";
+            return BAD_REQUEST;
+        }
+    }
+
     // UserService layer to handle the service request
     // the user_dao called inside the UserService handle the data layer
     Logger::get_instance()->log(INFO, "GET /api/resources");
-    json res = ResourceService::get_resources(user_id.value());
+    json res = key == "id"
+        ? ResourceService::get_resource(user_id.value(), atoi(value.c_str()))
+        : ResourceService::get_resources(user_id.value());
 
     json_res = res.dump();
     if (res.contains("error")){
@@ -564,8 +595,13 @@ http_conn::HTTP_CODE http_conn::handle_post_resource(char * text){
         return BAD_REQUEST;
     }
     
+    if (j.contains("is_file") && !j["is_file"].is_boolean()){
+        json_res = "{\"error\":\"invalid is_file\"}";
+        return BAD_REQUEST;
+    }
+
     // add the user resource back to db
-    std::set<std::string> allowed = {"id", "title", "content"};
+    std::set<std::string> allowed = {"id", "title", "content", "is_file"};
     std::string cols;
     std::string values;
     cols += "user_id,";
@@ -580,7 +616,9 @@ http_conn::HTTP_CODE http_conn::handle_post_resource(char * text){
         cols += key + ",";
 
         // number 
-        if(it.value().is_number()){
+        if (key == "is_file"){
+            values += it.value().get<bool>() ? "1," : "0,";
+        } else if(it.value().is_number()){
             values += it.value().dump() + ",";
         } else if (it.value().is_string()){
             std::string val = it.value();
@@ -751,6 +789,80 @@ http_conn::HTTP_CODE http_conn::handle_logout() {
 }
 
 
+http_conn::HTTP_CODE http_conn::handle_create_upload_url(char* text) {
+    std::optional<int> user_id = UserDAO::get_user_id_from_token(token);
+    if (user_id == std::nullopt) {
+        json_res = "{\"error\":\"unauthorized\"}";
+        Logger::get_instance()->log(ERROR, "unauthorized");
+        return FORBIDDEN_REQUEST;
+    }
+
+    std::string body(text);
+    Logger::get_instance()->log(INFO, "POST /api/files/upload-url body=" + body);
+
+    json j;
+    try {
+        j = json::parse(body);
+    } catch (const json::parse_error& e) {
+        json_res = "{\"error\":\"invalid JSON format\"}";
+        return BAD_REQUEST;
+    } catch (...) {
+        json_res = "{\"error\":\"internal error\"}";
+        return INTERNAL_ERROR;
+    }
+
+    if (!j.contains("filename") || !j["filename"].is_string() ||
+        !j.contains("content_type") || !j["content_type"].is_string()) {
+        json_res = "{\"error\":\"missing fields\"}";
+        return BAD_REQUEST;
+    }
+
+    json res = StorageService::create_upload_url(
+        user_id.value(),
+        j["filename"].get<std::string>(),
+        j["content_type"].get<std::string>());
+
+    json_res = res.dump();
+    if (res.contains("error")) {
+        return BAD_REQUEST;
+    }
+    return GET_RESOURCE;
+}
+
+
+http_conn::HTTP_CODE http_conn::handle_create_download_url() {
+    std::optional<int> user_id = UserDAO::get_user_id_from_token(token);
+    if (user_id == std::nullopt) {
+        json_res = "{\"error\":\"unauthorized\"}";
+        Logger::get_instance()->log(ERROR, "unauthorized");
+        return FORBIDDEN_REQUEST;
+    }
+
+    char* query = strchr(m_url, '?');
+    std::string key, value;
+    if (query) {
+        *query++ = '\0';
+        parse_query(query, key, value);
+    }
+
+    if (key != "resource_id" || value.empty() ||
+        !std::all_of(value.begin(), value.end(), ::isdigit)) {
+        json_res = "{\"error\":\"invalid parameter\"}";
+        return BAD_REQUEST;
+    }
+
+    json res = ResourceService::get_file_download_url(
+        user_id.value(),
+        atoi(value.c_str()));
+
+    json_res = res.dump();
+    if (res.contains("error")) {
+        return BAD_REQUEST;
+    }
+    return GET_RESOURCE;
+}
+
+
 // register
 http_conn::HTTP_CODE http_conn::handle_register(char * text){
         // extract body
@@ -777,6 +889,13 @@ http_conn::HTTP_CODE http_conn::handle_register(char * text){
         // validate id
         if (!j.contains("id") || !j["id"].is_number_integer()){
             json_res = "{\"error\":\"invalid id\"}";
+            return BAD_REQUEST;
+        }
+
+        if (!j.contains("name") || !j["name"].is_string() ||
+            !j.contains("email") || !j["email"].is_string() ||
+            !j.contains("password") || !j["password"].is_string()) {
+            json_res = "{\"error\":\"missing fields\"}";
             return BAD_REQUEST;
         }
         
@@ -1033,6 +1152,22 @@ bool http_conn::add_content( const char* content )
 
 // write the response to the write buffer
 bool http_conn::process_write(HTTP_CODE ret) {
+    auto add_json_response = [this](int status, const char* title) {
+        if (!add_status_line(status, title)) {
+            return false;
+        }
+        if (!add_headers(json_res.size(), "application/json")) {
+            return false;
+        }
+
+        m_iv[0].iov_base = m_write_buf;
+        m_iv[0].iov_len = m_write_index;
+        m_iv[1].iov_base = const_cast<char*>(json_res.c_str());
+        m_iv[1].iov_len = json_res.size();
+        m_iv_count = 2;
+        return true;
+    };
+
     switch (ret)
     {
         case INTERNAL_ERROR:
@@ -1043,13 +1178,10 @@ bool http_conn::process_write(HTTP_CODE ret) {
             }
             break;
         case BAD_REQUEST:
-            add_status_line(400, error_400_title);
             if (!json_res.empty()) {
-                add_headers(json_res.size(), "application/json");
-                if (!add_content(json_res.c_str())) {
-                    return false;
-                }
+                return add_json_response(400, error_400_title);
             } else {
+                add_status_line(400, error_400_title);
                 add_headers(strlen(error_400_form), "text");
                 if (!add_content(error_400_form)) {
                     return false;
@@ -1081,34 +1213,13 @@ bool http_conn::process_write(HTTP_CODE ret) {
             m_iv_count = 2;
             return true;
         case GET_RESOURCE:
-            add_status_line(200, ok_200_title);
-            add_headers(json_res.size(), "application/json");
-            add_content(json_res.c_str());
-            m_iv[0].iov_base = m_write_buf;
-            m_iv[0].iov_len = m_write_index;
-            m_iv_count = 1;
-            return true;
+            return add_json_response(200, ok_200_title);
         case ADD_RESOURCE:
-            add_status_line(200, ok_200_title);
-            add_headers(json_res.size(), "application/json");
-            add_content(json_res.c_str());
-            distribute_data();
-            m_iv_count = 1;
-            return true;
+            return add_json_response(200, ok_200_title);
         case UPDATE_RESOURCE:
-            add_status_line(200, ok_200_title);
-            add_headers(json_res.size(), "application/json");
-            add_content(json_res.c_str());
-            distribute_data();
-            m_iv_count = 1;
-            return true;
+            return add_json_response(200, ok_200_title);
         case DELETE_RESOURCE:
-            add_status_line(200, ok_200_title);
-            add_headers(json_res.size(), "application/json");
-            add_content(json_res.c_str());
-            distribute_data();
-            m_iv_count = 1;
-            return true;
+            return add_json_response(200, ok_200_title);
         default:
             return false;
     }
