@@ -1,6 +1,6 @@
 # C++ Webserver
 
-A C++17 HTTP web server with user authentication, resource management, Redis-backed sessions, MySQL persistence, Nginx load balancing, and MinIO file storage.
+A Scalable C++17 HTTP web server with user authentication, resource management, Redis-backed sessions, MySQL persistence, Nginx load balancing, and MinIO file storage.
 
 ## What It Does
 
