@@ -130,11 +130,11 @@ private:
 
 
 private:
-    int m_sockfd; // socket connected with this HTTP
-    sockaddr_in m_address; //client's network address information(IP addr + port)
+    int m_sockfd; // socket connected with this HTTP connection
+    sockaddr_in m_address; //connection's network address information(IP addr + port)
 
     char m_read_buf[READ_BUFFER_SIZE]; // read buffer
-    int m_read_index; //mark the next position of the last read byte of client data in the buffer
+    int m_read_index; //mark the next position of the last read byte of data in the read buffer
 
     // variabel for parse operation
     int m_checked_index;  // the position of the character currently being processed in the read buffer

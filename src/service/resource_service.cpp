@@ -101,6 +101,7 @@ res_json ResourceService::delete_resource(int user_id, int id){
          return res;
      }
 
+     // if the resource is file, we also need to delete the file stored in MinIO
      if (resource->is_file) {
          std::string error;
          if (!StorageService::delete_file(resource->content, error)) {

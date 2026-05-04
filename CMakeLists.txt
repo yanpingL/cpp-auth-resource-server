@@ -43,6 +43,7 @@ find_package(Threads REQUIRED)
 find_package(OpenSSL REQUIRED)
 find_package(CURL REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
+find_package(miniocpp CONFIG REQUIRED)
 find_package(PkgConfig REQUIRED)
 
 # Redis client library used by src/cache/redis_client.cpp.
@@ -70,6 +71,7 @@ target_link_libraries(${PROJECT_NAME}
         OpenSSL::Crypto
         CURL::libcurl
         nlohmann_json::nlohmann_json
+        miniocpp::miniocpp
         PkgConfig::HIREDIS
         PkgConfig::MYSQLCLIENT
 )

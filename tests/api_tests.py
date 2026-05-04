@@ -193,8 +193,8 @@ def test_11_get_resources_for_andrew():
     resources = {item["id"]: item for item in body["data"]}
     assert resources[1] == {
         "id": 1,
-        "title": "First resource",
-        "content": "hello world",
+        "title": "first article",
+        "content": "hello from curl",
         "is_file": False,
     }
     assert resources[2] == {

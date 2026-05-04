@@ -6,7 +6,6 @@
 #include <semaphore.h>
 
 // threads synchonisation mechanism class
-
 // exclusive mutex class
 // ---------------------------------------------------------------
 class locker {

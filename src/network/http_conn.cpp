@@ -30,7 +30,7 @@ const char* doc_root = "/workspace/src/resources";
 - addfd()
 - removedfd()
 - modfd()
-are all helper functions, nor related to the http_conn class or http_conn object
+are all helper functions, not related to the http_conn class or http_conn object
 so when using the function in other files we need the keyword "extern"
 */
 // set the fd as nonblocking
@@ -38,11 +38,10 @@ void setnonblock(int fd){
     int old_flag = fcntl(fd, F_GETFL);
     int new_flag = old_flag | O_NONBLOCK;
     fcntl(fd, F_SETFL, new_flag);
-
 }
 
 
-// add the fd to the epoll instance
+// Add the fd to the epoll instance
 void addfd(int epollfd, int fd, bool one_shot) {
     epoll_event event;
     event.data.fd = fd;;
@@ -60,7 +59,7 @@ void addfd(int epollfd, int fd, bool one_shot) {
     ├── fd3 → stored event config
     */
     epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &event);
-    // set the fd nonblok
+    // set the fd nonblok to enable the non-blocking I/O
     setnonblock(fd);
 }
 
@@ -72,7 +71,7 @@ void removefd(int epollfd, int fd) {
 }
 
 
-// modify the fd, reset the socket to make sure the EPOLLIN can be captured
+//  Modify the fd, reset the socket to make sure the EPOLLIN can be captured
 //  EPOLLONESHOT & EPOLLRDHUP
 void modfd(int epollfd, int fd, int ev) {
     epoll_event event;
@@ -90,7 +89,7 @@ int http_conn::m_epollfd = -1;    // the epoll instance shared by all sockets
 int http_conn::m_user_count = 0;  // total number of clients
 
 
-// close connection
+// Close connection
 // Each thread/user/connection maintains its own m_sockfd
 void http_conn::close_conn(){
     if(m_sockfd != -1){
@@ -101,7 +100,7 @@ void http_conn::close_conn(){
 }
 
 
-// initialize newly accepted connection
+// Initialize newly accepted connection
 void http_conn::init(int sockfd, const sockaddr_in &addr){
     m_sockfd = sockfd;
     m_address = addr;
@@ -118,12 +117,12 @@ void http_conn::init(int sockfd, const sockaddr_in &addr){
     m_user_count++;
     // add to epoll instance
     addfd(m_epollfd, m_sockfd, 1);
-
+    // initialize the other info
     init();
 } 
 
 
-// initialize other infos
+// Initialize other infos
 void http_conn::init(){
     m_check_stat = CHECK_STATE_REQUESTLINE;  // initialize the state as parse the first line of request
     m_linger = true;
@@ -152,10 +151,11 @@ void http_conn::init(){
 }
 
 
-// repeately read data from client until no more data or connection closed
-// read data from the connection socket fd and store them in the read buffer
+// Repeately read data from client until no more data or connection closed
+// Read data from the connection socket fd and store them in the read buffer
 // This function is called in MAIN THREAD by corresponding http_conn object
 bool http_conn::read(){
+    // if the read buffer is full, return false
     if(m_read_index >= READ_BUFFER_SIZE)
         return false;
     // byte already read
@@ -163,7 +163,7 @@ bool http_conn::read(){
     while(1) {
         /*
         m_sockfd: read from which fd
-        m_read_buf+m_read_index: write the read content to where
+        m_read_buf+m_read_index: from where to write the read content
         READ_BUFFER_SIZE - m_read_index: how many bytes are safe to read
         0: flag
         */
@@ -172,8 +172,8 @@ bool http_conn::read(){
         // handle the error case
         if(bytes_read == -1) {
             /*
-                EAGAIN
-                “We have read all available data for now”
+            EAGAIN or EWOULDBLOCK
+            “We have read all available data for now”, return True
             */
             if(errno == EAGAIN || errno == EWOULDBLOCK){      
                 // no data
@@ -187,18 +187,15 @@ bool http_conn::read(){
         // update the m_read_index
         m_read_index += bytes_read;
     }
-    // std::cout << "Read all data in one time\n";
-    // std::cout << "read data: \n" << m_read_buf << std::endl;
     return true;
 }
 
 
 
-// From this position, the functions below called in CHILDREN THREADS (individual http_conn object)
-// parse one line, check based on \r\n
+// From now on, the functions below called in WORKER THREADS (by individual http_conn object)
+// Parse line by line, check based on \r\n
 /*
 .......\r\n
-......\r\n
 \r: Carriage Return --> moves cursor to the beginning of the line
 \n: Line Feed --> Move the cursor down to the next line
 */
@@ -213,6 +210,7 @@ http_conn::LINE_STATUS http_conn::parse_line(){
             // didn't read the '\n', stop at '\r', incomplete
             if ((m_checked_index + 1) == m_read_index){
                 return LINE_OPEN;
+                // if the next character is '\n', return LINE_OK
             } else if (m_read_buf[m_checked_index + 1] == '\n'){
                 // fill the '\r' and '\n' as '\0'
                 m_read_buf[m_checked_index++] = '\0';
@@ -234,7 +232,7 @@ http_conn::LINE_STATUS http_conn::parse_line(){
 }
 
 
-// parse HTTP reuqest fist line, get the method, target URL, HTTP version
+// Parse HTTP reuqest line, get the method, target URL, HTTP version
 /*
 GET /index.html HTTP/1.1
 or
@@ -254,9 +252,9 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char * text){
     }
     // fill the first ' ' as '\0' and move the pointer 1 position forward
     *m_url++ = '\0';
-    char *method = text; // GET
+    char *method = text; // method: GET, POST, PUT, DELETE
 
-    // need to update to other METHODS
+    // need to update to corresponding METHODS
     if (strcasecmp(method, "POST") == 0){
         m_method = POST;
     } else if (strcasecmp(method, "PUT") == 0){
@@ -267,7 +265,7 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char * text){
         m_method = DELETE;
     } 
 
-    // check the HTTP version: /index.html HTTP/1.1
+    // check the HTTP version:  METHOD /index.html HTTP/1.1
     // if the m_version points to null, return bad request
     // result: /index.html\0hTTP/1.1
     m_version = strpbrk(m_url, " \t");
@@ -280,11 +278,15 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char * text){
     }
 
     /*
-    check the request type
+    check the request URL
     0. GET /api/user?id=x HTTP/1.1 
     1. POST /api/login or /api/logout
     2. GET /api/resources 
     */
+    // request to the user owned resources
+    if(strncmp(m_url, "/api/resources", 14) == 0){
+        apireq = 1;
+    }
     // request for user account
     if(strncmp(m_url, "/api/login", 10) == 0){
         apireq = 2;
@@ -295,6 +297,7 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char * text){
     if(strncmp(m_url, "/api/register", 13) == 0){
         apireq = 4;
     }
+    // request for file upload URL
     if(strncmp(m_url, "/api/files/upload-url", 21) == 0){
         apireq = 5;
     }
@@ -302,14 +305,8 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char * text){
         apireq = 6;
     }
 
-    // request to the user owned resources
-    if(strncmp(m_url, "/api/resources", 14) == 0){
-        apireq = 1;
-    }
-
-
     /**
-     * http://192.168.110.129:10000/index.html
+     * eg website addr: http://192.168.110.129:10000/index.html
     */
     // non-api request, file request
     if (strncasecmp(m_url, "http://", 7) == 0 ){
@@ -326,7 +323,9 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char * text){
     return NO_REQUEST;
 }
 
-// parse request header
+
+
+// Parse request header
 /*
 common format:
 
@@ -337,7 +336,7 @@ Host: localhost:8080
 Connection: keep-alive
 User-Agent: Mozilla/5.0
 Accept: text/html
-(after headers, start of body if any)
+(after headers, a blank line, start of body if any)
 
 -----------------------------------------------------
 POST Request (with Body)
@@ -349,43 +348,42 @@ Content-Type: application/x-www-form-urlencoded
 - every header ends with \r\n
 - There is a blank line \r\n after the last header
 - Then optional body
-
 */
+
 http_conn::HTTP_CODE http_conn::parse_headers(char * text){
-
-    // blank line encountered, header fully parsed
-    // There is a blank line \r\n after the last header
     if(text[0] == '\0') {
-        // if HTTP request has body, need to read m_content_length bytes body
-        // state machine change to CHECK_STATE_CONTENT
+    // Blank line encountered, header fully parsed
+    // There is a blank line \r\n after the last header
+    // Decide the next step:
 
-        // DELETE /api/user?id=... usually has no body.
+        // request like DELETE /api/user?id=... usually has no body.
         // Execute handler once headers are fully parsed.
         // All query with type 1 need to validate the user token
         if (apireq == 1){
             if (m_method == DELETE){
-                // return handle_delete_user();
                 return handle_delete_resource();
             } else if(m_method == GET){
-                // return handle_get_user();
                 return handle_get_resources();
             } 
         }
-        if (apireq == 6 && m_method == GET){
-            return handle_create_download_url();
-        }
+        // request for user account
         if (m_method == POST && (apireq == 2 || apireq == 3 || apireq == 4 || apireq == 5)){
             m_check_stat = CHECK_STATE_CONTENT;
             return NO_REQUEST;
         }
-        
+        // request for file download URL
+        if (apireq == 6 && m_method == GET){
+            return handle_create_download_url();
+        }
+
         if (m_content_length != 0 ) {
             m_check_stat = CHECK_STATE_CONTENT;
             return NO_REQUEST; // request incomplete, still need to parse the body
         }
         
-        // file request
+        // last request option: static file request (only for exercise, not integrated into business logic)
         return GET_REQUEST;
+
 
     } else if (strncasecmp( text, "Connection:", 11 ) == 0 ) {
         // Parse Connection header bytes  [Connection: keep-alive]
@@ -421,26 +419,26 @@ http_conn::HTTP_CODE http_conn::parse_headers(char * text){
             token = auth.substr(7);
         }
     }
-    // still incomplete
+    // Request still incomplete
     return NO_REQUEST;
 }
 
 
-// parse request body
+// Parse request body
 // Didn't really parse the HTTP request body, only check if it's fully read
+// Then route it to the corresponding business logic
 http_conn::HTTP_CODE http_conn::parse_content(char * text){
-    if (m_read_index >= (m_content_length + m_checked_index ) )
-    {   
+    // Request body is fully read
+    if (m_read_index >= (m_content_length + m_checked_index ) ) {   
         // ensure string end
         text[ m_content_length ] = '\0';
-        // need to parse the content with POST method
+        // Route it to the corresponding business logic
         if (apireq == 1){
             if (m_method == POST){
                 return handle_post_resource(text);
             } else if(m_method == PUT){ 
                 return handle_put_resource(text);
             }
-
         } else if (m_method == POST && apireq == 2){
             return handle_login(text);
         } else if (m_method == POST && apireq == 3){
@@ -452,7 +450,9 @@ http_conn::HTTP_CODE http_conn::parse_content(char * text){
         }
         return GET_REQUEST;
     }
-    return NO_REQUEST;
+
+    // Request body is not fully read
+    return BAD_REQUEST;
 }
 
 
@@ -462,7 +462,7 @@ Request handle function ----------------------------------------------
 
 //Implement GET/api/user (USING nlohmann/json)
 //GET/api/user?id=123 HTTP/1.1
-// helper function used in handle_get_resource()
+//Helper function used in handle_get_resource(), to get key and value
 void http_conn::parse_query(char* query_string, std::string& key, std::string& value) {
     char* equal = strchr(query_string, '=');
     if (equal) {
@@ -472,14 +472,16 @@ void http_conn::parse_query(char* query_string, std::string& key, std::string& v
     }
 }
 
-// need to complete the last half of the parse_request_line
 /*===================
-should be invalid, change to get_resource
+Business handle logic
 ========================
 */
+
+// GET /api/resources  
+// or GET api/resources?id=x
 http_conn::HTTP_CODE http_conn::handle_get_resources(){
 
-    // protect API
+    // Protect API
     std::optional<int> user_id = UserDAO::get_user_id_from_token(token);
     if (user_id == std::nullopt) {
         json_res = "{\"error\":\"unauthorized\"}";
@@ -493,6 +495,7 @@ http_conn::HTTP_CODE http_conn::handle_get_resources(){
         *query++ = '\0';
         parse_query(query, key, value);
 
+        // validate id
         if (key != "id" || value.empty() ||
             !std::all_of(value.begin(), value.end(), ::isdigit)) {
             json_res = "{\"error\":\"invalid parameter\"}";
@@ -501,7 +504,7 @@ http_conn::HTTP_CODE http_conn::handle_get_resources(){
     }
 
     // UserService layer to handle the service request
-    // the user_dao called inside the UserService handle the data layer
+    // User_dao called inside the UserService handle the data layer
     Logger::get_instance()->log(INFO, "GET /api/resources");
     json res = key == "id"
         ? ResourceService::get_resource(user_id.value(), atoi(value.c_str()))
@@ -517,10 +520,8 @@ http_conn::HTTP_CODE http_conn::handle_get_resources(){
 
 
 /*
-request format: DELETE /api/user?id=1 HTTP/1.1
-shoudl be delete resource
+Handle Request: DELETE /api/resources?id=1
 */
-
 http_conn::HTTP_CODE http_conn::handle_delete_resource(){
 
     // protect API
@@ -540,7 +541,9 @@ http_conn::HTTP_CODE http_conn::handle_delete_resource(){
     }
 
     // validate id
-    if (key != "id" || !std::all_of(value.begin(), value.end(), ::isdigit)){
+    if (key != "id" || value.empty()
+        || !std::all_of(value.begin(), value.end(), ::isdigit)){
+
         json_res = "{\"error\":\"invalid parameter\"}";
         return BAD_REQUEST;
     }
@@ -557,6 +560,7 @@ http_conn::HTTP_CODE http_conn::handle_delete_resource(){
 }
 
 
+// Handle Request: POST /api/resources
 http_conn::HTTP_CODE http_conn::handle_post_resource(char * text){
 
     // protect API
@@ -569,8 +573,6 @@ http_conn::HTTP_CODE http_conn::handle_post_resource(char * text){
     
     // extract body
     std::string body(text);
-    // debug
-    std::cout << "Body: " << body << std::endl;
     Logger::get_instance()->log(INFO, "POST /api/resource body=" + body);
 
     json j;
@@ -587,14 +589,12 @@ http_conn::HTTP_CODE http_conn::handle_post_resource(char * text){
         return INTERNAL_ERROR;
     }
 
-    
-
-    // validate id
+    // validate id field in the request body
     if (!j.contains("id") || !j["id"].is_number_integer()){
         json_res = "{\"error\":\"invalid id\"}";
         return BAD_REQUEST;
     }
-    
+    // valid the is_file field
     if (j.contains("is_file") && !j["is_file"].is_boolean()){
         json_res = "{\"error\":\"invalid is_file\"}";
         return BAD_REQUEST;
@@ -610,7 +610,7 @@ http_conn::HTTP_CODE http_conn::handle_post_resource(char * text){
     for (auto it = j.begin(); it != j.end(); ++it){
         std::string key = it.key();
 
-        // whitelist
+        // attribute whitelist
         if(!allowed.count(key)) continue;
 
         cols += key + ",";
@@ -625,7 +625,7 @@ http_conn::HTTP_CODE http_conn::handle_post_resource(char * text){
             values += "'" + val + "',";
         }
     }
-    
+    // pop the last semicolon
     if(!cols.empty()) cols.pop_back();
     if(!values.empty()) values.pop_back();
 
@@ -643,9 +643,8 @@ http_conn::HTTP_CODE http_conn::handle_post_resource(char * text){
 }
 
 
-// PUT METHOD
+// Handle Method: PUT api/resources
 http_conn::HTTP_CODE http_conn::handle_put_resource(char* text){
-
     // protect API
     std::optional<int> user_id = UserDAO::get_user_id_from_token(token);
     if (user_id == std::nullopt) {
@@ -656,7 +655,6 @@ http_conn::HTTP_CODE http_conn::handle_put_resource(char* text){
 
     // debug
     std::string body(text);
-    std::cout << "PUT Body: " << body << std::endl;
     Logger::get_instance()->log(INFO, "PUT /api/resource body=" + body);
     json j;
 
@@ -771,7 +769,6 @@ http_conn::HTTP_CODE http_conn::handle_logout() {
         return FORBIDDEN_REQUEST;
     }
 
-
     if (token.empty()) {
         json_res = "{\"error\":\"no token\"}";
         Logger::get_instance()->log(ERROR, "no token");
@@ -789,6 +786,7 @@ http_conn::HTTP_CODE http_conn::handle_logout() {
 }
 
 
+// Handle POST api/files/upload-url
 http_conn::HTTP_CODE http_conn::handle_create_upload_url(char* text) {
     std::optional<int> user_id = UserDAO::get_user_id_from_token(token);
     if (user_id == std::nullopt) {
@@ -830,6 +828,7 @@ http_conn::HTTP_CODE http_conn::handle_create_upload_url(char* text) {
 }
 
 
+// Handle GET api/files/download-url?resource_id=1002
 http_conn::HTTP_CODE http_conn::handle_create_download_url() {
     std::optional<int> user_id = UserDAO::get_user_id_from_token(token);
     if (user_id == std::nullopt) {
@@ -863,7 +862,7 @@ http_conn::HTTP_CODE http_conn::handle_create_download_url() {
 }
 
 
-// register
+// Handle POST api/register
 http_conn::HTTP_CODE http_conn::handle_register(char * text){
         // extract body
         std::string body(text);
@@ -1056,7 +1055,7 @@ http_conn::HTTP_CODE http_conn::do_request(){
 }
 
 
-// 对内存映射区执行munmap操作, reverse the mapping
+// reverse the mapping
 // munmap to memory
 void http_conn::unmap() {
     // only reverse the valid m_file_address
@@ -1325,6 +1324,7 @@ void http_conn::process() {
     HTTP_CODE read_ret = process_read();
     // after finishing the process_read(), 
     
+    // when the request is incomplete, worker modify the fd as EPOLLIN event 
     if(read_ret == NO_REQUEST){
         modfd(m_epollfd, m_sockfd, EPOLLIN);
         return;

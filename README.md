@@ -22,10 +22,13 @@ At the application level, it supports:
 The typical file flow is:
 
 ```text
+Client Upload File:
 client -> backend: ask for upload URL
-backend -> client: return presigned MinIO PUT URL + public URL
+backend -> client: return presigned MinIO PUT URL(upload) + public URL
 client -> MinIO: upload file bytes
 client -> backend: create resource with content=<public_url>, is_file=true
+
+Client Downlaod File:
 client -> backend: ask for download URL by resource_id
 backend -> client: return presigned MinIO GET URL
 client -> MinIO: download file bytes
@@ -85,22 +88,33 @@ cd /Volumes/codefield/webserver
 Build and start the containers:
 
 ```bash
-docker compose build web1 web2
+docker compose build
 docker compose up -d
 ```
 
 Build the C++ server inside both web containers:
 
 ```bash
-docker exec sys-web-1 bash -lc "cd /workspace && cmake -S . -B build && cmake --build build --target webserver"
-docker exec sys-web-2 bash -lc "cd /workspace && cmake -S . -B build && cmake --build build --target webserver"
+docker exec sys-web-1 bash -lc "cd /workspace && cmake -S . -B build && cmake --build build"
+docker exec sys-web-2 bash -lc "cd /workspace && cmake -S . -B build && cmake --build build"
 ```
 
-Start the server process in both containers:
+Start the server process from inside each web container.
+
+In one terminal, enter the first container and run the server:
 
 ```bash
-docker exec -d sys-web-1 bash -lc "cd /workspace && ./build/bin/webserver 8080"
-docker exec -d sys-web-2 bash -lc "cd /workspace && ./build/bin/webserver 8080"
+docker exec -it sys-web-1 bash
+cd /workspace
+./build/bin/webserver 8080
+```
+
+In a second terminal, enter the second container and run the server:
+
+```bash
+docker exec -it sys-web-2 bash
+cd /workspace
+./build/bin/webserver 8080
 ```
 
 Check that the containers are running:
@@ -108,6 +122,7 @@ Check that the containers are running:
 ```bash
 docker ps
 ```
+
 
 The main API entry point is:
 
@@ -122,6 +137,7 @@ This goes through Nginx and load-balances between `web1` and `web2`.
 The application expects MySQL tables for users, sessions, and resources. If your database is empty, create tables like this:
 
 ```bash
+# enter the mysql container 
 docker exec -it sys-mysql mysql -uroot -proot123 webdb
 ```
 
@@ -153,29 +169,59 @@ CREATE TABLE resources (
 );
 ```
 
-For the current API tests, the database also expects a sample user and two resources:
+For the current API tests, the database also expects a sample user and two resources. After the tables exist and the webserver processes are running, create those records through the API from a local terminal.
 
-```sql
-INSERT INTO users (id, name, email, password)
-VALUES (1, 'Andrew', 'andrew@test.com', 'hash3')
-ON DUPLICATE KEY UPDATE
-    name=VALUES(name),
-    email=VALUES(email),
-    password=VALUES(password);
+Create the sample user:
 
-INSERT INTO resources (id, user_id, title, content, is_file)
-VALUES
-    (1, 1, 'First resource', 'hello world', false),
-    (2, 1, 'Second resource', 'hello People', false)
-ON DUPLICATE KEY UPDATE
-    title=VALUES(title),
-    content=VALUES(content),
-    is_file=VALUES(is_file);
+```bash
+curl -s -X POST http://localhost:8080/api/register \
+  -H "Content-Type: application/json" \
+  -d '{"id":1,"name":"Andrew","email":"andrew@test.com","password":"hash3"}'
 ```
 
-## Send Requests From Your Terminal
+Login as the sample user and copy the returned token:
 
-### Login
+```bash
+curl -s -X POST http://localhost:8080/api/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"andrew@test.com","password":"hash3"}'
+```
+
+The response contains a token:
+
+```json
+{"token":"...","user_id":1}
+```
+
+Save the token in your local terminal:
+
+```bash
+TOKEN="paste_the_login_token_here"
+```
+
+Create the two sample resources:
+
+```bash
+curl -s -X POST http://localhost:8080/api/resources \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"id":1,"title":"First resource","content":"hello world","is_file":false}'
+
+curl -s -X POST http://localhost:8080/api/resources \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"id":2,"title":"Second resource","content":"hello People","is_file":false}'
+```
+
+Log out the account:
+```bash
+curl -s -X POST http://localhost:8080/api/logout \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+
+## For Specific Function Test, Send Requests From Your Local Terminal
+### Login 
 
 ```bash
 curl -s -X POST http://localhost:8080/api/login \
@@ -234,7 +280,8 @@ curl -s -X DELETE "http://localhost:8080/api/resources?id=1001" \
   -H "Authorization: Bearer $TOKEN"
 ```
 
-### Get A File Upload URL
+### Upload A file: Two Step Approach
+### First Step: Get A File Upload URL
 
 ```bash
 curl -s -X POST http://localhost:8080/api/files/upload-url \
@@ -250,26 +297,27 @@ The response contains:
 - `object_key`: MinIO object key.
 - `expires_in`: upload URL lifetime in seconds.
 
+Save the necessary URL in your shell 
+
 ### Upload File Bytes To MinIO
 
 Copy the `upload_url` from the previous response:
+UPLOAD_URL="<paste-upload-url-here>"
+Copy the `public_url` from the upload URL response:
+PUBLIC_URL="<paste-public-url-here>"
 
 ```bash
-UPLOAD_URL="<paste-upload-url-here>"
-echo "hello file" > hello.txt
+echo "hello file" > hello.txt #write content into file hello.txt
 
 curl -X PUT "$UPLOAD_URL" \
   -H "Content-Type: text/plain" \
   --data-binary @hello.txt
 ```
 
+### Second Step: Create the File Resource URL in the DB
 ### Create A File Resource
 
-Copy the `public_url` from the upload URL response:
-
 ```bash
-PUBLIC_URL="<paste-public-url-here>"
-
 curl -s -X POST http://localhost:8080/api/resources \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
@@ -277,7 +325,6 @@ curl -s -X POST http://localhost:8080/api/resources \
 ```
 
 ### Get A File Download URL
-
 ```bash
 curl -s "http://localhost:8080/api/files/download-url?resource_id=1002" \
   -H "Authorization: Bearer $TOKEN"
@@ -290,6 +337,7 @@ The response contains `download_url`.
 ```bash
 DOWNLOAD_URL="<paste-download-url-here>"
 curl -L "$DOWNLOAD_URL" -o downloaded-hello.txt
+# then the file is downloaded in local directory
 ```
 
 ### Logout
@@ -300,15 +348,6 @@ curl -s -X POST http://localhost:8080/api/logout \
 ```
 
 ## Run Tests
-
-Build (inside the container, either server is fine) and run(in local terminal) the C++ unit tests:
-
-```bash
-cmake -S . -B build
-cmake --build build --target unit_tests
-./build/bin/unit_tests
-```
-
 Run the Python API tests in local terminal:
 
 ```bash
@@ -371,7 +410,7 @@ This layer owns the HTTP server mechanics:
 - Uses `epoll` for event-driven IO.
 - Uses a thread pool to process requests.
 - Parses HTTP request lines, headers, and bodies.
-- Routes API requests by path and method.
+- Routes API requests by URL and method.
 - Builds HTTP responses.
 - Serves static files from `src/resources`.
 

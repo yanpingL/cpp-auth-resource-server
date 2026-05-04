@@ -1,23 +1,22 @@
 #include "storage_service.h"
 
-#include <curl/curl.h>
-#include <openssl/hmac.h>
-#include <openssl/sha.h>
+#include <miniocpp/client.h>
 
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
 #include <cctype>
-#include <ctime>
-#include <iomanip>
-#include <map>
-#include <sstream>
 #include <string>
 #include <set>
-#include <vector>
 
 namespace {
 
+struct MinioEndpoint {
+    std::string host;
+    bool https;
+};
+
+// Reads an environment variable, returning the fallback when it is unset.
 std::string get_env_or_default(const char* name, const std::string& fallback) {
     const char* value = std::getenv(name);
     if (value == nullptr || value[0] == '\0') {
@@ -26,6 +25,7 @@ std::string get_env_or_default(const char* name, const std::string& fallback) {
     return value;
 }
 
+// Reads a positive integer from an environment variable, or uses the fallback.
 int get_env_int_or_default(const char* name, int fallback) {
     const char* value = std::getenv(name);
     if (value == nullptr || value[0] == '\0') {
@@ -40,6 +40,7 @@ int get_env_int_or_default(const char* name, int fallback) {
     return static_cast<int>(parsed);
 }
 
+// Removes trailing slashes so endpoint strings can be joined predictably.
 std::string trim_trailing_slash(std::string value) {
     while (!value.empty() && value.back() == '/') {
         value.pop_back();
@@ -47,6 +48,40 @@ std::string trim_trailing_slash(std::string value) {
     return value;
 }
 
+// Converts an endpoint URL into the host and scheme format expected by MinIO SDK.
+MinioEndpoint parse_minio_endpoint(const std::string& endpoint) {
+    MinioEndpoint parsed{trim_trailing_slash(endpoint), true};
+
+    const std::string http_prefix = "http://";
+    const std::string https_prefix = "https://";
+
+    if (parsed.host.rfind(http_prefix, 0) == 0) {
+        parsed.host = parsed.host.substr(http_prefix.size());
+        parsed.https = false;
+    } else if (parsed.host.rfind(https_prefix, 0) == 0) {
+        parsed.host = parsed.host.substr(https_prefix.size());
+        parsed.https = true;
+    }
+
+    return parsed;
+}
+
+// Creates a MinIO SDK base URL from the configured endpoint and region.
+minio::s3::BaseUrl make_minio_base_url(const std::string& endpoint) {
+    const MinioEndpoint parsed = parse_minio_endpoint(endpoint);
+    const std::string region = get_env_or_default("MINIO_REGION", "us-east-1");
+
+    return minio::s3::BaseUrl(parsed.host, parsed.https, region);
+}
+
+// Creates a static credential provider from the MinIO access key and secret.
+minio::creds::StaticProvider make_minio_provider() {
+    return minio::creds::StaticProvider(
+        get_env_or_default("MINIO_ACCESS_KEY", "minioadmin"),
+        get_env_or_default("MINIO_SECRET_KEY", "minioadmin"));
+}
+
+// Replaces unsafe filename characters and rejects empty or dot-only names.
 std::string sanitize_filename(const std::string& filename) {
     std::string clean;
     clean.reserve(filename.size());
@@ -65,12 +100,14 @@ std::string sanitize_filename(const std::string& filename) {
     return clean;
 }
 
+// Lowercases a string for case-insensitive validation checks.
 std::string to_lower(std::string value) {
     std::transform(value.begin(), value.end(), value.begin(),
         [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
     return value;
 }
 
+// Returns the lowercase file extension, including the leading dot.
 std::string file_extension(const std::string& filename) {
     const std::size_t dot = filename.find_last_of('.');
     if (dot == std::string::npos) {
@@ -79,12 +116,14 @@ std::string file_extension(const std::string& filename) {
     return to_lower(filename.substr(dot));
 }
 
+// Rejects filenames that try to include directories or parent-directory markers.
 bool has_path_traversal(const std::string& filename) {
     return filename.find('/') != std::string::npos ||
         filename.find('\\') != std::string::npos ||
         filename.find("..") != std::string::npos;
 }
 
+// Checks whether an upload MIME type is allowed by this application.
 bool is_allowed_content_type(const std::string& content_type) {
     static const std::set<std::string> allowed = {
         "text/plain",
@@ -97,6 +136,7 @@ bool is_allowed_content_type(const std::string& content_type) {
     return allowed.count(to_lower(content_type)) > 0;
 }
 
+// Blocks executable or script-like extensions even when the MIME type is allowed.
 bool is_blocked_extension(const std::string& filename) {
     static const std::set<std::string> blocked = {
         ".bat", ".cmd", ".com", ".dll", ".exe", ".js", ".ps1", ".sh"
@@ -104,172 +144,44 @@ bool is_blocked_extension(const std::string& filename) {
     return blocked.count(file_extension(filename)) > 0;
 }
 
+// Returns the current Unix timestamp in milliseconds for unique object keys.
 long long current_epoch_millis() {
     using namespace std::chrono;
     return duration_cast<milliseconds>(
         system_clock::now().time_since_epoch()).count();
 }
 
-std::string bytes_to_hex(const unsigned char* bytes, std::size_t len) {
-    std::ostringstream out;
-    out << std::hex << std::setfill('0');
-    for (std::size_t i = 0; i < len; ++i) {
-        out << std::setw(2) << static_cast<int>(bytes[i]);
-    }
-    return out.str();
-}
-
-std::string sha256_hex(const std::string& value) {
-    unsigned char hash[SHA256_DIGEST_LENGTH];
-    SHA256(
-        reinterpret_cast<const unsigned char*>(value.data()),
-        value.size(),
-        hash);
-    return bytes_to_hex(hash, SHA256_DIGEST_LENGTH);
-}
-
-std::vector<unsigned char> hmac_sha256(
-    const std::vector<unsigned char>& key,
-    const std::string& value) {
-
-    unsigned int len = 0;
-    unsigned char hash[EVP_MAX_MD_SIZE];
-    HMAC(
-        EVP_sha256(),
-        key.data(),
-        static_cast<int>(key.size()),
-        reinterpret_cast<const unsigned char*>(value.data()),
-        value.size(),
-        hash,
-        &len);
-    return std::vector<unsigned char>(hash, hash + len);
-}
-
-std::vector<unsigned char> hmac_sha256(
-    const std::string& key,
-    const std::string& value) {
-
-    return hmac_sha256(
-        std::vector<unsigned char>(key.begin(), key.end()),
-        value);
-}
-
-std::string hmac_sha256_hex(
-    const std::vector<unsigned char>& key,
-    const std::string& value) {
-
-    const auto hash = hmac_sha256(key, value);
-    return bytes_to_hex(hash.data(), hash.size());
-}
-
-bool is_unreserved(unsigned char c) {
-    return std::isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~';
-}
-
-std::string url_encode(const std::string& value, bool preserve_slash) {
-    std::ostringstream out;
-    out << std::uppercase << std::hex << std::setfill('0');
-
-    for (unsigned char c : value) {
-        if (is_unreserved(c) || (preserve_slash && c == '/')) {
-            out << static_cast<char>(c);
-        } else {
-            out << '%' << std::setw(2) << static_cast<int>(c);
-        }
-    }
-    return out.str();
-}
-
-std::string extract_host(const std::string& endpoint) {
-    std::size_t start = endpoint.find("://");
-    start = (start == std::string::npos) ? 0 : start + 3;
-
-    std::size_t end = endpoint.find('/', start);
-    if (end == std::string::npos) {
-        return endpoint.substr(start);
-    }
-    return endpoint.substr(start, end - start);
-}
-
-std::string utc_time_string(const char* format) {
-    std::time_t now = std::time(nullptr);
-    std::tm tm{};
-    gmtime_r(&now, &tm);
-
-    char buf[32];
-    std::strftime(buf, sizeof(buf), format, &tm);
-    return buf;
-}
-
-std::string build_canonical_query(const std::map<std::string, std::string>& params) {
-    std::string query;
-    for (const auto& [key, value] : params) {
-        if (!query.empty()) {
-            query += "&";
-        }
-        query += url_encode(key, false) + "=" + url_encode(value, false);
-    }
-    return query;
-}
-
-std::string create_presigned_url(
-    const std::string& method,
-    const std::string& public_endpoint,
+// Asks the MinIO SDK to create a presigned object URL for the requested method.
+storage_json create_presigned_url(
+    minio::http::Method method,
+    const std::string& endpoint,
     const std::string& bucket,
     const std::string& object_key,
     int expires_seconds) {
 
-    const std::string access_key = get_env_or_default("MINIO_ACCESS_KEY", "minioadmin");
-    const std::string secret_key = get_env_or_default("MINIO_SECRET_KEY", "minioadmin");
-    const std::string region = get_env_or_default("MINIO_REGION", "us-east-1");
-    const std::string service = "s3";
+    storage_json res;
+    minio::s3::BaseUrl base_url = make_minio_base_url(endpoint);
+    minio::creds::StaticProvider provider = make_minio_provider();
+    minio::s3::Client client(base_url, &provider);
 
-    const std::string amz_date = utc_time_string("%Y%m%dT%H%M%SZ");
-    const std::string date_scope = utc_time_string("%Y%m%d");
-    const std::string credential_scope =
-        date_scope + "/" + region + "/" + service + "/aws4_request";
-    const std::string credential = access_key + "/" + credential_scope;
-    const std::string host = extract_host(public_endpoint);
-    const std::string canonical_uri =
-        "/" + bucket + "/" + url_encode(object_key, true);
+    minio::s3::GetPresignedObjectUrlArgs args;
+    args.bucket = bucket;
+    args.object = object_key;
+    args.method = method;
+    args.expiry_seconds = static_cast<unsigned int>(expires_seconds);
 
-    std::map<std::string, std::string> query_params = {
-        {"X-Amz-Algorithm", "AWS4-HMAC-SHA256"},
-        {"X-Amz-Credential", credential},
-        {"X-Amz-Date", amz_date},
-        {"X-Amz-Expires", std::to_string(expires_seconds)},
-        {"X-Amz-SignedHeaders", "host"},
-    };
+    minio::s3::GetPresignedObjectUrlResponse resp =
+        client.GetPresignedObjectUrl(args);
+    if (!resp) {
+        res["error"] = resp.Error().String();
+        return res;
+    }
 
-    const std::string canonical_query = build_canonical_query(query_params);
-    const std::string canonical_headers = "host:" + host + "\n";
-    const std::string signed_headers = "host";
-    const std::string payload_hash = "UNSIGNED-PAYLOAD";
-
-    const std::string canonical_request =
-        method + "\n" +
-        canonical_uri + "\n" +
-        canonical_query + "\n" +
-        canonical_headers + "\n" +
-        signed_headers + "\n" +
-        payload_hash;
-
-    const std::string string_to_sign =
-        "AWS4-HMAC-SHA256\n" +
-        amz_date + "\n" +
-        credential_scope + "\n" +
-        sha256_hex(canonical_request);
-
-    const auto date_key = hmac_sha256("AWS4" + secret_key, date_scope);
-    const auto region_key = hmac_sha256(date_key, region);
-    const auto service_key = hmac_sha256(region_key, service);
-    const auto signing_key = hmac_sha256(service_key, "aws4_request");
-    const std::string signature = hmac_sha256_hex(signing_key, string_to_sign);
-
-    return public_endpoint + canonical_uri + "?" +
-        canonical_query + "&X-Amz-Signature=" + signature;
+    res["url"] = resp.url;
+    return res;
 }
 
+// Extracts the stored object key from a public MinIO URL.
 std::string extract_object_key_from_public_url(
     const std::string& public_url,
     const std::string& public_endpoint,
@@ -282,37 +194,9 @@ std::string extract_object_key_from_public_url(
     return public_url.substr(prefix.size());
 }
 
-bool execute_presigned_delete(const std::string& delete_url, std::string& error) {
-    CURL* curl = curl_easy_init();
-    if (curl == nullptr) {
-        error = "failed to initialize curl";
-        return false;
-    }
-
-    curl_easy_setopt(curl, CURLOPT_URL, delete_url.c_str());
-    curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "DELETE");
-    curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);
-
-    CURLcode result = curl_easy_perform(curl);
-    long status_code = 0;
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);
-    curl_easy_cleanup(curl);
-
-    if (result != CURLE_OK) {
-        error = curl_easy_strerror(result);
-        return false;
-    }
-
-    if (status_code != 200 && status_code != 204) {
-        error = "MinIO delete failed with status " + std::to_string(status_code);
-        return false;
-    }
-
-    return true;
-}
-
 } // namespace
 
+// Validates upload metadata and returns a presigned PUT URL plus public file info.
 storage_json StorageService::create_upload_url(
     int user_id,
     const std::string& filename,
@@ -367,12 +251,17 @@ storage_json StorageService::create_upload_url(
     const int expires_seconds =
         get_env_int_or_default("MINIO_UPLOAD_URL_EXPIRES", 300);
 
-    res["upload_url"] = create_presigned_url(
-        "PUT",
+    storage_json upload = create_presigned_url(
+        minio::http::Method::kPut,
         public_endpoint,
         bucket,
         object_key,
         expires_seconds);
+    if (upload.contains("error")) {
+        return upload;
+    }
+
+    res["upload_url"] = upload["url"];
     res["public_url"] = public_url;
     res["object_key"] = object_key;
     res["bucket"] = bucket;
@@ -383,6 +272,7 @@ storage_json StorageService::create_upload_url(
 }
 
 
+// Returns a short-lived presigned GET URL for an existing public file URL.
 storage_json StorageService::create_download_url(const std::string& public_url) {
     storage_json res;
 
@@ -400,12 +290,17 @@ storage_json StorageService::create_download_url(const std::string& public_url) 
     const int expires_seconds =
         get_env_int_or_default("MINIO_DOWNLOAD_URL_EXPIRES", 300);
 
-    res["download_url"] = create_presigned_url(
-        "GET",
+    storage_json download = create_presigned_url(
+        minio::http::Method::kGet,
         public_endpoint,
         bucket,
         object_key,
         expires_seconds);
+    if (download.contains("error")) {
+        return download;
+    }
+
+    res["download_url"] = download["url"];
     res["public_url"] = public_url;
     res["object_key"] = object_key;
     res["bucket"] = bucket;
@@ -415,6 +310,7 @@ storage_json StorageService::create_download_url(const std::string& public_url) 
 }
 
 
+// Deletes the MinIO object referenced by a public URL.
 bool StorageService::delete_file(const std::string& public_url, std::string& error) {
     const std::string bucket = get_env_or_default("MINIO_BUCKET", "webserver-files");
     const std::string public_endpoint = trim_trailing_slash(
@@ -429,12 +325,19 @@ bool StorageService::delete_file(const std::string& public_url, std::string& err
         return false;
     }
 
-    const std::string delete_url = create_presigned_url(
-        "DELETE",
-        internal_endpoint,
-        bucket,
-        object_key,
-        60);
+    minio::s3::BaseUrl base_url = make_minio_base_url(internal_endpoint);
+    minio::creds::StaticProvider provider = make_minio_provider();
+    minio::s3::Client client(base_url, &provider);
 
-    return execute_presigned_delete(delete_url, error);
+    minio::s3::RemoveObjectArgs args;
+    args.bucket = bucket;
+    args.object = object_key;
+
+    minio::s3::RemoveObjectResponse resp = client.RemoveObject(args);
+    if (!resp) {
+        error = resp.Error().String();
+        return false;
+    }
+
+    return true;
 }
