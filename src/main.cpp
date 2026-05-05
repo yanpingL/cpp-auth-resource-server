@@ -175,7 +175,8 @@ int main(int argc, char* argv[]){
                 // detect write task in task queue, main thread writes from the write buffer
                 // of the connection task to the socket
                 if(!users[sockfd].write()) {
-                    // fail to write in one time, close connection.
+                    // 1) fail to write in one time, close connection.
+                    // 2) or the write finihsed, but the connection should be closed, as "keep_alive" = false
                     users[sockfd].close_conn();
                 }
             }
@@ -196,7 +197,7 @@ int main(int argc, char* argv[]){
 This system simulate the Proactor pattern by 
 - Letting the main thread handle the read & write from/to socket to/from
 buffer write(), read()
-- & the other threads process the data read & generate response
+- Worker threads process the data  & generate response
     process_read(), process_write()
 
 */

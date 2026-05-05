@@ -828,7 +828,7 @@ http_conn::HTTP_CODE http_conn::handle_create_upload_url(char* text) {
 }
 
 
-// Handle GET api/files/download-url?resource_id=1002
+// Handle GET api/files/download-url?resource_id=xx
 http_conn::HTTP_CODE http_conn::handle_create_download_url() {
     std::optional<int> user_id = UserDAO::get_user_id_from_token(token);
     if (user_id == std::nullopt) {
@@ -941,22 +941,22 @@ http_conn::HTTP_CODE http_conn::handle_register(char * text){
 }
 
 
-// host state machine
+// Host state machine
 http_conn::HTTP_CODE http_conn::process_read(){
     LINE_STATUS line_status = LINE_OK;
     HTTP_CODE ret = NO_REQUEST;
     char * text = 0;
 
-    // we process the content in the read buffer line by line
+    // We process the content in the read buffer line by line
+    // Based on the state line to 
     // In this block, the [break] only jump out of the switch, not whiles
     while(((m_check_stat == CHECK_STATE_CONTENT) && (line_status == LINE_OK)) 
             || (line_status = parse_line()) == LINE_OK) {
-        // parse a line of full complete data, 
-        // or parse the request body also complete data 
+
         text = get_line();
         m_start_line = m_checked_index; // move pointer to the poition needs to be parsed
         switch(m_check_stat){
-            // parse a line
+            // after parse a line, we check a state
             // at this state, we never return unless BAD_REQUEST detected
             // cause we still need to 
             case CHECK_STATE_REQUESTLINE:
@@ -980,7 +980,7 @@ http_conn::HTTP_CODE http_conn::process_read(){
                 } else if(ret == NO_REQUEST){
                     break;
                 }
-                // in this logic, ret can also be other values except GET_REQUEST
+                // in this logic, ret can also be other values besides GET_REQUEST
                 return ret;
             }
             // parse body
@@ -992,7 +992,6 @@ http_conn::HTTP_CODE http_conn::process_read(){
                 } else if (ret != NO_REQUEST){
                     return ret;
                 }
-                // when ret == NO_REQUEST
                 line_status = LINE_OPEN;
                 break;
             }
@@ -1004,7 +1003,7 @@ http_conn::HTTP_CODE http_conn::process_read(){
         // parse a line 
     }
     return NO_REQUEST;
-} //parse the request of HTTP
+} //parse the request of HTTP line by line
 
 
 
@@ -1055,7 +1054,7 @@ http_conn::HTTP_CODE http_conn::do_request(){
 }
 
 
-// reverse the mapping
+// Reverse the mapping
 // munmap to memory
 void http_conn::unmap() {
     // only reverse the valid m_file_address
@@ -1069,7 +1068,7 @@ void http_conn::unmap() {
 }
 
 
-// write the data to be send in the write buffer
+// write the data to be sent in the write buffer
 bool http_conn::add_response( const char* format, ... ) {
     if( m_write_index >= WRITE_BUFFER_SIZE ) {
         return false;
@@ -1100,7 +1099,6 @@ bool http_conn::add_response( const char* format, ... ) {
     va_arg(arg_list, type);         // get next argument
     va_end(arg_list);               // cleanup
     */
-
     int len = vsnprintf( m_write_buf + m_write_index, WRITE_BUFFER_SIZE - 1 - m_write_index, format, arg_list );
     if( len >= ( WRITE_BUFFER_SIZE - 1 - m_write_index ) ) {
         return false;
@@ -1257,9 +1255,8 @@ bool http_conn::write(){
             // in this case, the socket buffer is full, writev() is non-blocking 
             // and cannot progressing anymore.
             // no need to modify the m_iv
-
-            // 如果TCP写缓冲没有空间，则等待下一轮EPOLLOUT事件，虽然在此期间，
-            // 服务器无法立即接收到同一客户的下一个请求，但可以保证连接的完整性。
+            // If TCP no longer has write buffer, wait for the next EPOLLOUT event,
+            // To ensure the connection completness.
             if( errno == EAGAIN ) {
                 modfd(m_epollfd, m_sockfd, EPOLLOUT );
                 return true;
@@ -1286,7 +1283,7 @@ bool http_conn::write(){
 
         }
 
-        // case 2: file part
+        // case 2: file/body part
         if (m_iv_count == 2 && bytes_have_send > 0){
             m_iv[1].iov_base = (char*)m_iv[1].iov_base + bytes_have_send;
             m_iv[1].iov_len -= bytes_have_send;
@@ -1298,7 +1295,8 @@ bool http_conn::write(){
         // bytes_to_send -= temp;
         // bytes_have_send += temp;
         if ( bytes_to_send <= 0 ) {
-            // 发送HTTP响应成功，根据HTTP请求中的Connection字段决定是否立即关闭连接
+            // send HTTP response succeeds, decide whether close connection based on the "keep_alive" of 
+            // HTTP request
             unmap();
             if(m_linger) {
                 // reset the socket, wati another EPOLLIN event
@@ -1315,8 +1313,8 @@ bool http_conn::write(){
 
 
 
-// called by the threads in the threads poll
-// interface to process the request of HTTP
+// Called by the worker threads in the threads poll
+// Interface to process the request of HTTP
 void http_conn::process() {
 
     // parse the request of HTTP
@@ -1325,6 +1323,7 @@ void http_conn::process() {
     // after finishing the process_read(), 
     
     // when the request is incomplete, worker modify the fd as EPOLLIN event 
+    // and return 
     if(read_ret == NO_REQUEST){
         modfd(m_epollfd, m_sockfd, EPOLLIN);
         return;
@@ -1336,7 +1335,7 @@ void http_conn::process() {
     if(!write_ret) {
         close_conn();
     }
-    // after generating the response, we register EPOLLOUT to the event to the socket tracked by m_epollfd
-    // Notify me when this socket is writable so I can actually send data.
+    // after generating the response, we register EPOLLOUT to the socket tracked by m_epollfd
+    // Notify app when this socket is writable so I can actually send data.
     modfd(m_epollfd, m_sockfd, EPOLLOUT);
 }

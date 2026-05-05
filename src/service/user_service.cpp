@@ -57,7 +57,7 @@ json_type UserService::login(const std::string& email, const std::string& passwo
         "INSERT INTO sessions (user_id, token, expires_at) VALUES (" +
         std::to_string(user.id) + ", '" + token +"', NOW() + INTERVAL 1 HOUR)";
     
-    // add info to sessions table
+    // add info to users table
     UserDAO::create_user(sql);  // reuse existing function
 
     res["token"] = token;

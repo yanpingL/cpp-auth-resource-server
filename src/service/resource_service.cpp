@@ -37,7 +37,6 @@ res_json ResourceService::get_resources(int user_id){
 
           res["data"].push_back(item);
      }
-
      return res;
 }
 
