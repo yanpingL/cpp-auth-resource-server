@@ -7,6 +7,7 @@
 
 std::string ResourceDAO::msg;
 
+// Executes a resource INSERT statement.
 bool ResourceDAO::create_resource(const std::string& sql){
 
     connection_pool* pool = connection_pool::get_instance();
@@ -28,8 +29,7 @@ bool ResourceDAO::create_resource(const std::string& sql){
     return success;
 }
 
-
-
+// Loads all resources owned by one user.
 std::vector<Resource> ResourceDAO::get_resources(int user_id){
      std::vector<Resource> res;
      msg.clear();
@@ -78,7 +78,7 @@ std::vector<Resource> ResourceDAO::get_resources(int user_id){
      return res;
 }
 
-
+// Loads one resource by user id and resource id.
 std::optional<Resource> ResourceDAO::get_resource(int user_id, int id){
     msg.clear();
     connection_pool* pool = connection_pool::get_instance();
@@ -129,7 +129,7 @@ std::optional<Resource> ResourceDAO::get_resource(int user_id, int id){
     return r;
 }
 
-
+// Executes a resource UPDATE statement and reports whether a row changed.
 bool ResourceDAO::update_resource(const std::string& sql){
     connection_pool* pool = connection_pool::get_instance();
     MYSQL* conn = pool->get_connection();
@@ -156,7 +156,7 @@ bool ResourceDAO::update_resource(const std::string& sql){
     return success;
 }
 
-
+// Deletes one resource owned by the given user.
 bool ResourceDAO::delete_resource(int user_id, int id){
     connection_pool* pool = connection_pool::get_instance();
     MYSQL* conn = pool->get_connection();

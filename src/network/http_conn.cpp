@@ -25,15 +25,7 @@ const char* error_500_form = "There was an unusual problem serving the requested
 // Root directory for static files inside the Docker/container workspace.
 const char* doc_root = "/workspace/src/resources";
 
-/*
-- setnonblock()
-- addfd()
-- removedfd()
-- modfd()
-are all helper functions, not related to the http_conn class or http_conn object
-so when using the function in other files we need the keyword "extern"
-*/
-// set the fd as nonblocking
+// epoll helper functions shared with main.cpp.
 void setnonblock(int fd){
     int old_flag = fcntl(fd, F_GETFL);
     int new_flag = old_flag | O_NONBLOCK;
@@ -46,20 +38,10 @@ void addfd(int epollfd, int fd, bool one_shot) {
     epoll_event event;
     event.data.fd = fd;;
     event.events = EPOLLIN | EPOLLRDHUP;
-    // event.events = EPOLLIN | EPOLLRDHUP | EPOLLET;
     if (one_shot){
-        // only one thread process the same socket
         event.events |= EPOLLONESHOT;
     }
-    // event is copied into the kernal epoll data structure
-    /*
-    epoll instance (epollfd)
-    ├── fd1 → stored event config
-    ├── fd2 → stored event config
-    ├── fd3 → stored event config
-    */
     epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &event);
-    // set the fd nonblok to enable the non-blocking I/O
     setnonblock(fd);
 }
 
@@ -71,19 +53,13 @@ void removefd(int epollfd, int fd) {
 }
 
 
-//  Modify the fd, reset the socket to make sure the EPOLLIN can be captured
-//  EPOLLONESHOT & EPOLLRDHUP
+// Reset the socket event and keep EPOLLONESHOT protection.
 void modfd(int epollfd, int fd, int ev) {
     epoll_event event;
     event.data.fd = fd;
     event.events = ev | EPOLLONESHOT | EPOLLRDHUP;
     epoll_ctl(epollfd, EPOLL_CTL_MOD, fd, &event);
 }
-
-//-------------------------------------------------------------------------------
-// The codes below start to define the class functions/ variables
-
-
 
 int http_conn::m_epollfd = -1;    // the epoll instance shared by all sockets
 int http_conn::m_user_count = 0;  // total number of clients
@@ -94,116 +70,68 @@ void http_conn::init(int sockfd, const sockaddr_in &addr){
     m_sockfd = sockfd;
     m_address = addr;
 
-    // set the port multiplexing
-    /*
-    Computing Internet:
-    The port multiplexing Key Point to prepare
-    */
     int reuse = 1; // represent to reuse the port to avoid the TIME_WAIT period
-    // make the port be reused in TIME_WAIT
-    // not allow multiple active servers bind to same port
     setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
     m_user_count++;
-    // add to epoll instance
     addfd(m_epollfd, m_sockfd, 1);
-    // initialize the other info
     init();
 }
 
-// Called by the worker threads in the threads poll
-// Interface to process the request of HTTP
+// Worker-thread entry point for a completed read event.
 void http_conn::process() {
-
-    // parse the request of HTTP
-    // from the connection socket fd
     HTTP_CODE read_ret = process_read();
-    // after finishing the process_read(),
 
-    // when the request is incomplete, worker modify the fd as EPOLLIN event
-    // and return
     if(read_ret == NO_REQUEST){
         modfd(m_epollfd, m_sockfd, EPOLLIN);
         return;
     }
 
-    // we proceed with the process_write() based on the result of process_read().
-    // create response
     bool write_ret = process_write(read_ret);
     if(!write_ret) {
         close_conn();
     }
-    // after generating the response, we register EPOLLOUT to the socket tracked by m_epollfd
-    // Notify app when this socket is writable so I can actually send data.
     modfd(m_epollfd, m_sockfd, EPOLLOUT);
 }
 
-// Repeately read data from client until no more data or connection closed
-// Read data from the connection socket fd and store them in the read buffer
-// This function is called in MAIN THREAD by corresponding http_conn object
+// Main thread reads all currently available bytes into the connection buffer.
 bool http_conn::read(){
-    // if the read buffer is full, return false
     if(m_read_index >= READ_BUFFER_SIZE)
         return false;
-    // byte already read
+
     int bytes_read = 0;
     while(1) {
-        /*
-        m_sockfd: read from which fd
-        m_read_buf+m_read_index: from where to write the read content
-        READ_BUFFER_SIZE - m_read_index: how many bytes are safe to read
-        0: flag
-        */
         bytes_read = recv(m_sockfd, m_read_buf + m_read_index, READ_BUFFER_SIZE - m_read_index, 0);
 
-        // handle the error case
         if(bytes_read == -1) {
-            /*
-            EAGAIN or EWOULDBLOCK
-            “We have read all available data for now”, return True
-            */
             if(errno == EAGAIN || errno == EWOULDBLOCK){
-                // no data
                 break;
             }
             return false;
         } else if(bytes_read == 0){
-            // the other part close the connection
             return false;
         }
-        // update the m_read_index
         m_read_index += bytes_read;
     }
     return true;
 }
 
-// Again, this function is called by the MAIN THREAD, by the corresponding http_conn object
-// write HTTP response to the m_sockfd
+// Main thread writes prepared response buffers to the client socket.
 bool http_conn::write(){
     int temp = 0;
     int bytes_have_send = 0;  // bytes already sent
-    // int bytes_to_send = m_write_index; //bytes wait to be sent
     int bytes_to_send = m_iv[0].iov_len + (m_iv_count == 2 ? m_iv[1].iov_len : 0); //bytes wait to be sent
 
     if(bytes_to_send == 0) {
-        // bytes wait to be sent is 0, response terminates
-        // resset the socket as wait for read
         modfd(m_epollfd, m_sockfd, EPOLLIN);
-        // reset everything related to this socket
         init();
         return true;
     }
 
     while(1) {
-        // wirte distributely
-        // writev() is non-blocking
         temp = writev(m_sockfd, m_iv, m_iv_count);
 
         if (temp <= -1) {
-            // in this case, the socket buffer is full, writev() is non-blocking
-            // and cannot progressing anymore.
-            // no need to modify the m_iv
-            // If TCP no longer has write buffer, wait for the next EPOLLOUT event,
-            // To ensure the connection completness.
+            // Socket send buffer is full; wait for the next writable event.
             if( errno == EAGAIN ) {
                 modfd(m_epollfd, m_sockfd, EPOLLOUT );
                 return true;
@@ -212,17 +140,14 @@ bool http_conn::write(){
             return false;
         }
 
-        // adjust iov
         bytes_have_send = temp;
 
-        // case 1: header not fully sent
         if (m_iv[0].iov_len > 0) {
             if (bytes_have_send < (int)m_iv[0].iov_len){
                 m_iv[0].iov_base = static_cast<char*>(m_iv[0].iov_base) + bytes_have_send;
                 m_iv[0].iov_len -= bytes_have_send;
                 continue;
             } else {
-                // header fully sent
                 bytes_have_send-= m_iv[0].iov_len;
                 m_iv[0].iov_base = NULL;
                 m_iv[0].iov_len = 0;
@@ -230,23 +155,16 @@ bool http_conn::write(){
 
         }
 
-        // case 2: file/body part
         if (m_iv_count == 2 && bytes_have_send > 0){
             m_iv[1].iov_base = (char*)m_iv[1].iov_base + bytes_have_send;
             m_iv[1].iov_len -= bytes_have_send;
         }
 
-        // recompute remaining bytes
         bytes_to_send = m_iv[0].iov_len +(m_iv_count == 2 ? m_iv[1].iov_len : 0);
 
-        // bytes_to_send -= temp;
-        // bytes_have_send += temp;
         if ( bytes_to_send <= 0 ) {
-            // send HTTP response succeeds, decide whether close connection based on the "keep_alive" of
-            // HTTP request
             unmap();
             if(m_linger) {
-                // reset the socket, wati another EPOLLIN event
                 init();
                 modfd( m_epollfd, m_sockfd, EPOLLIN );
                 return true;
@@ -257,26 +175,22 @@ bool http_conn::write(){
         }
     }
 }
-
-
-
 // Close connection
-// Each thread/user/connection maintains its own m_sockfd
 void http_conn::close_conn(){
     if(m_sockfd != -1){
         removefd(m_epollfd, m_sockfd);
         m_sockfd = -1;
-        m_user_count--; // close a connection, #users --;
+        m_user_count--;
     }
 }
 
 
 // Initialize other infos
 void http_conn::init(){
-    m_check_stat = CHECK_STATE_REQUESTLINE;  // initialize the state as parse the first line of request
+    m_check_stat = CHECK_STATE_REQUESTLINE;
     m_linger = true;
 
-    m_method = GET; // default request method
+    m_method = GET;
     m_url = 0;
     m_version = 0;
     m_content_length = 0;
@@ -305,29 +219,22 @@ http_conn::HTTP_CODE http_conn::process_read(){
     HTTP_CODE ret = NO_REQUEST;
     char * text = 0;
 
-    // We process the content in the read buffer line by line
-    // Based on the state line to
-    // In this block, the [break] only jump out of the switch, not whiles
+    // Parse request line, headers, and optional body as data becomes complete.
     while(((m_check_stat == CHECK_STATE_CONTENT) && (line_status == LINE_OK))
             || (line_status = parse_line()) == LINE_OK) {
 
         text = get_line();
-        m_start_line = m_checked_index; // move pointer to the poition needs to be parsed
+        m_start_line = m_checked_index;
         switch(m_check_stat){
-            // after parse a line, we check a state
-            // at this state, we never return unless BAD_REQUEST detected
-            // cause we still need to
             case CHECK_STATE_REQUESTLINE:
             {
                 ret = parse_request_line(text);
                 if(ret == BAD_REQUEST) {
-                    // grammaer error
                     return BAD_REQUEST;
                 }
                 break;
             }
 
-            // parse headers
             case CHECK_STATE_HEADER:
             {
                 ret = parse_headers(text);
@@ -338,10 +245,8 @@ http_conn::HTTP_CODE http_conn::process_read(){
                 } else if(ret == NO_REQUEST){
                     break;
                 }
-                // in this logic, ret can also be other values besides GET_REQUEST
                 return ret;
             }
-            // parse body
             case CHECK_STATE_CONTENT:
             {
                 ret = parse_content(text);
@@ -358,32 +263,19 @@ http_conn::HTTP_CODE http_conn::process_read(){
                 return INTERNAL_ERROR;
             }
         }
-        // parse a line
     }
     return NO_REQUEST;
-} //parse the request of HTTP line by line
+}
 
-// From now on, the functions below called in WORKER THREADS (by individual http_conn object)
-// Parse line by line, check based on \r\n
-/*
-.......\r\n
-\r: Carriage Return --> moves cursor to the beginning of the line
-\n: Line Feed --> Move the cursor down to the next line
-*/
-
-// read the request line by line from the reaad buffer
+// Parse one CRLF-terminated line from the read buffer.
 http_conn::LINE_STATUS http_conn::parse_line(){
     char temp;
     for(; m_checked_index < m_read_index; ++m_checked_index){
-        // parse from 0th byte
         temp = m_read_buf[m_checked_index];
         if(temp == '\r'){
-            // didn't read the '\n', stop at '\r', incomplete
             if ((m_checked_index + 1) == m_read_index){
                 return LINE_OPEN;
-                // if the next character is '\n', return LINE_OK
             } else if (m_read_buf[m_checked_index + 1] == '\n'){
-                // fill the '\r' and '\n' as '\0'
                 m_read_buf[m_checked_index++] = '\0';
                 m_read_buf[m_checked_index++] = '\0';
                 return LINE_OK;
@@ -398,35 +290,20 @@ http_conn::LINE_STATUS http_conn::parse_line(){
             return LINE_BAD;
         }
     }
-    // parse all data being read, but still yet reach \r or \n, so incomplete line
     return LINE_OPEN;
 }
 
 
 // Parse HTTP reuqest line, get the method, target URL, HTTP version
-/*
-GET /index.html HTTP/1.1
-or
-GET /HTTP/1.1\r\n
-or  (API GET request line)
-GET /api/user?id=123 HTTP/1.1
-or
-GET http://192.168.110.129:10000/index.html HTTP/1.1
-*/
-
 http_conn::HTTP_CODE http_conn::parse_request_line(char * text){
-    // GET /index.html HTTP/1.1
-    // put the pointer to the position of the first appearance of the specified character
-    // blank space or \t --> tab character
     m_url = strpbrk(text, " \t");
     if (!m_url) {
         return BAD_REQUEST;
     }
-    // fill the first ' ' as '\0' and move the pointer 1 position forward
-    *m_url++ = '\0';
-    char *method = text; // method: GET, POST, PUT, DELETE
 
-    // need to update to corresponding METHODS
+    *m_url++ = '\0';
+    char *method = text;
+
     if (strcasecmp(method, "POST") == 0){
         m_method = POST;
     } else if (strcasecmp(method, "PUT") == 0){
@@ -437,9 +314,6 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char * text){
         m_method = DELETE;
     }
 
-    // check the HTTP version:  METHOD /index.html HTTP/1.1
-    // if the m_version points to null, return bad request
-    // result: /index.html\0hTTP/1.1
     m_version = strpbrk(m_url, " \t");
     if (!m_version){
         return BAD_REQUEST;
@@ -449,17 +323,10 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char * text){
         return BAD_REQUEST;
     }
 
-    /*
-    check the request URL
-    0. GET /api/user?id=x HTTP/1.1
-    1. POST /api/login or /api/logout
-    2. GET /api/resources
-    */
-    // request to the user owned resources
+    // Mark API request type for later routing after headers/body are complete.
     if(strncmp(m_url, "/api/resources", 14) == 0){
         apireq = 1;
     }
-    // request for user account
     if(strncmp(m_url, "/api/login", 10) == 0){
         apireq = 2;
     }
@@ -469,7 +336,6 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char * text){
     if(strncmp(m_url, "/api/register", 13) == 0){
         apireq = 4;
     }
-    // request for file upload URL
     if(strncmp(m_url, "/api/files/upload-url", 21) == 0){
         apireq = 5;
     }
@@ -477,60 +343,22 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char * text){
         apireq = 6;
     }
 
-    /**
-     * eg website addr: http://192.168.110.129:10000/index.html
-    */
-    // non-api request, file request
+    // Static file requests may arrive with an absolute URL.
     if (strncasecmp(m_url, "http://", 7) == 0 ){
         m_url += 7;
-        m_url = strchr(m_url, '/'); // index.html
+        m_url = strchr(m_url, '/');
     }
     if (!m_url || m_url[0] != '/'){
         return BAD_REQUEST;
     }
 
-    // The request line parse finished
-    // the check state become the check_state_header
     m_check_stat = CHECK_STATE_HEADER;
     return NO_REQUEST;
 }
-
-
-
 // Parse request header
-/*
-common format:
-
-GET Request (No Body)
-GET /index.html HTTP/1.1 (request line)
-(headers)
-Host: localhost:8080
-Connection: keep-alive
-User-Agent: Mozilla/5.0
-Accept: text/html
-(after headers, a blank line, start of body if any)
-
------------------------------------------------------
-POST Request (with Body)
-Host: localhost:8080
-Connection: keep-alive
-Content-Length: 123
-Content-Type: application/x-www-form-urlencoded
-
-- every header ends with \r\n
-- There is a blank line \r\n after the last header
-- Then optional body
-*/
-
 http_conn::HTTP_CODE http_conn::parse_headers(char * text){
     if(text[0] == '\0') {
-    // Blank line encountered, header fully parsed
-    // There is a blank line \r\n after the last header
-    // Decide the next step:
-
-        // request like DELETE /api/user?id=... usually has no body.
-        // Execute handler once headers are fully parsed.
-        // All query with type 1 need to validate the user token
+        // Header block is complete. Body-less API routes can be handled now.
         if (apireq == 1){
             if (m_method == DELETE){
                 return handle_delete_resource();
@@ -538,29 +366,25 @@ http_conn::HTTP_CODE http_conn::parse_headers(char * text){
                 return handle_get_resources();
             }
         }
-        // request for user account
         if (m_method == POST && (apireq == 2 || apireq == 3 || apireq == 4 || apireq == 5)){
             m_check_stat = CHECK_STATE_CONTENT;
             return NO_REQUEST;
         }
-        // request for file download URL
         if (apireq == 6 && m_method == GET){
             return handle_create_download_url();
         }
 
         if (m_content_length != 0 ) {
             m_check_stat = CHECK_STATE_CONTENT;
-            return NO_REQUEST; // request incomplete, still need to parse the body
+            return NO_REQUEST;
         }
 
-        // last request option: static file request (only for exercise, not integrated into business logic)
+        // Fallback for static file serving.
         return GET_REQUEST;
 
 
     } else if (strncasecmp( text, "Connection:", 11 ) == 0 ) {
-        // Parse Connection header bytes  [Connection: keep-alive]
         text += 11;
-        // Move the pointer text forward past all leading spaces and tabs.
         text += strspn( text, " \t" );
         if ( strcasecmp( text, "keep-alive" ) == 0 ) {
             m_linger = true;
@@ -569,14 +393,11 @@ http_conn::HTTP_CODE http_conn::parse_headers(char * text){
         }
 
     } else if ( strncasecmp( text, "Content-Length:", 15 ) == 0 ) {
-        // Parse Content-Length [Content-Length: XXX]
         text += 15;
         text += strspn( text, " \t" );
-        // convert a numeric string to a long integer
         m_content_length = atol(text);
 
     } else if ( strncasecmp( text, "Host:", 5 ) == 0 ) {
-        // parse Host header bytes: [Host: localhost:8080]
         text += 5;
         text += strspn( text, " \t" );
         m_host = text;
@@ -586,12 +407,10 @@ http_conn::HTTP_CODE http_conn::parse_headers(char * text){
         text += strspn(text, " \t");
 
         std::string auth = text;
-        // expect: Bearer xxx
         if (auth.find("Bearer ") == 0) {
             token = auth.substr(7);
         }
     }
-    // Request still incomplete
     return NO_REQUEST;
 }
 
@@ -601,11 +420,8 @@ http_conn::HTTP_CODE http_conn::parse_headers(char * text){
 // Then route it to the corresponding business logic
 
 http_conn::HTTP_CODE http_conn::parse_content(char * text){
-    // Request body is fully read
     if (m_read_index >= (m_content_length + m_checked_index ) ) {
-        // ensure string end
         text[ m_content_length ] = '\0';
-        // Route it to the corresponding business logic
         if (apireq == 1){
             if (m_method == POST){
                 return handle_post_resource(text);
@@ -624,41 +440,27 @@ http_conn::HTTP_CODE http_conn::parse_content(char * text){
         return GET_REQUEST;
     }
 
-    // Request body is not fully read
     return BAD_REQUEST;
 }
 
 
-/*====================================================================
-
-Business handle logic
-======================================================================
-*/
-
 // Handle POST api/register
 http_conn::HTTP_CODE http_conn::handle_register(char * text){
-        // extract body
         std::string body(text);
-        // debug
         std::cout << "Body: " << body << std::endl;
         Logger::get_instance()->log(INFO, "POST /api/register body=" + body);
 
         json j;
         try {
-            // next step: parse JSON
             j = json::parse(body);
         } catch(const json::parse_error& e){
-            // malformed JSON
             json_res = "{\"error\":\"invalid JSON format\"}";
             return BAD_REQUEST;
         } catch (...){
-            // other unexpected errors
             json_res = "{\"error\":\"internal error\"}";
             return INTERNAL_ERROR;
         }
 
-
-        // validate id
         if (!j.contains("id") || !j["id"].is_number_integer()){
             json_res = "{\"error\":\"invalid id\"}";
             return BAD_REQUEST;
@@ -671,7 +473,6 @@ http_conn::HTTP_CODE http_conn::handle_register(char * text){
             return BAD_REQUEST;
         }
 
-        // add the user resource back to db
         std::set<std::string> allowed = {"id", "name", "email", "password"};
         std::string cols;
         std::string values;
@@ -679,17 +480,13 @@ http_conn::HTTP_CODE http_conn::handle_register(char * text){
         for (auto it = j.begin(); it != j.end(); ++it){
             std::string key = it.key();
 
-            // whitelist
             if(!allowed.count(key)) continue;
 
             cols += key + ",";
-            // number
             if(it.value().is_number()){
                 values += it.value().dump() + ",";
-            // string
             } else if (it.value().is_string()){
                 std::string val = it.value();
-                //hash password only
                 if (key == "password") {
                     val = sha256(val);
                 }
@@ -714,7 +511,7 @@ http_conn::HTTP_CODE http_conn::handle_register(char * text){
 }
 
 
-// login function
+// Handle POST api/login
 http_conn::HTTP_CODE http_conn::handle_login(char* text) {
 
     std::string body(text);
@@ -722,14 +519,11 @@ http_conn::HTTP_CODE http_conn::handle_login(char* text) {
 
     json j;
     try {
-        // next step: parse JSON
         j = json::parse(body);
     } catch(const json::parse_error& e){
-        // malformed JSON
         json_res = "{\"error\":\"invalid JSON format\"}";
         return BAD_REQUEST;
     } catch (...){
-        // other unexpected errors
         json_res = "{\"error\":\"internal error\"}";
         return INTERNAL_ERROR;
     }
@@ -752,14 +546,12 @@ http_conn::HTTP_CODE http_conn::handle_login(char* text) {
         return BAD_REQUEST;
     }
 
-    return GET_RESOURCE;  // return JSON
+    return GET_RESOURCE;
 }
 
 
-// logout
-
+// Handle POST api/logout
 http_conn::HTTP_CODE http_conn::handle_logout() {
-    // validdate token
     if (!UserDAO::validate_token(token)) {
         json_res = "{\"error\":\"invalid token\"}";
         return FORBIDDEN_REQUEST;
@@ -782,7 +574,7 @@ http_conn::HTTP_CODE http_conn::handle_logout() {
 }
 
 
-//Helper function used in handle_get_resource(), to get key and value
+// Parse simple key=value query strings used by the API routes.
 void http_conn::parse_query(char* query_string, std::string& key, std::string& value) {
     char* equal = strchr(query_string, '=');
     if (equal) {
@@ -792,12 +584,9 @@ void http_conn::parse_query(char* query_string, std::string& key, std::string& v
     }
 }
 
-// GET /api/resources
-// or GET api/resources?id=x
-
+// Handle GET /api/resources and GET /api/resources?id=x.
 http_conn::HTTP_CODE http_conn::handle_get_resources(){
 
-    // Protect API
     std::optional<int> user_id = UserService::get_user_id_from_token(token);
     if (user_id == std::nullopt) {
         json_res = "{\"error\":\"unauthorized\"}";
@@ -811,7 +600,6 @@ http_conn::HTTP_CODE http_conn::handle_get_resources(){
         *query++ = '\0';
         parse_query(query, key, value);
 
-        // validate id
         if (key != "id" || value.empty() ||
             !std::all_of(value.begin(), value.end(), ::isdigit)) {
             json_res = "{\"error\":\"invalid parameter\"}";
@@ -819,8 +607,6 @@ http_conn::HTTP_CODE http_conn::handle_get_resources(){
         }
     }
 
-    // UserService layer to handle the service request
-    // User_dao called inside the UserService handle the data layer
     Logger::get_instance()->log(INFO, "GET /api/resources");
     json res = key == "id"
         ? ResourceService::get_resource(user_id.value(), atoi(value.c_str()))
@@ -835,13 +621,9 @@ http_conn::HTTP_CODE http_conn::handle_get_resources(){
 }
 
 
-/*
-Handle Request: DELETE /api/resources?id=1
-*/
-
+// Handle DELETE /api/resources?id=x.
 http_conn::HTTP_CODE http_conn::handle_delete_resource(){
 
-    // protect API
     std::optional<int> user_id = UserService::get_user_id_from_token(token);
     if (user_id == std::nullopt) {
         json_res = "{\"error\":\"unauthorized\"}";
@@ -857,7 +639,6 @@ http_conn::HTTP_CODE http_conn::handle_delete_resource(){
         parse_query(query, key, value);
     }
 
-    // validate id
     if (key != "id" || value.empty()
         || !std::all_of(value.begin(), value.end(), ::isdigit)){
 
@@ -877,10 +658,8 @@ http_conn::HTTP_CODE http_conn::handle_delete_resource(){
 }
 
 
-// Handle Request: POST /api/resources
-
+// Handle POST /api/resources.
 http_conn::HTTP_CODE http_conn::handle_post_resource(char * text){
-    // protect API
     std::optional<int> user_id = UserService::get_user_id_from_token(token);
     if (user_id == std::nullopt) {
         json_res = "{\"error\":\"unauthorized\"}";
@@ -888,36 +667,29 @@ http_conn::HTTP_CODE http_conn::handle_post_resource(char * text){
         return FORBIDDEN_REQUEST;
     }
 
-    // extract body
     std::string body(text);
     Logger::get_instance()->log(INFO, "POST /api/resource body=" + body);
 
     json j;
     try {
-        // next step: parse JSON
         j = json::parse(body);
     } catch(const json::parse_error& e){
-        // malformed JSON
         json_res = "{\"error\":\"invalid JSON format\"}";
         return BAD_REQUEST;
     } catch (...){
-        // other unexpected errors
         json_res = "{\"error\":\"internal error\"}";
         return INTERNAL_ERROR;
     }
 
-    // validate id field in the request body
     if (!j.contains("id") || !j["id"].is_number_integer()){
         json_res = "{\"error\":\"invalid id\"}";
         return BAD_REQUEST;
     }
-    // valid the is_file field
     if (j.contains("is_file") && !j["is_file"].is_boolean()){
         json_res = "{\"error\":\"invalid is_file\"}";
         return BAD_REQUEST;
     }
 
-    // add the user resource back to db
     std::set<std::string> allowed = {"id", "title", "content", "is_file"};
     std::string cols;
     std::string values;
@@ -927,12 +699,10 @@ http_conn::HTTP_CODE http_conn::handle_post_resource(char * text){
     for (auto it = j.begin(); it != j.end(); ++it){
         std::string key = it.key();
 
-        // attribute whitelist
         if(!allowed.count(key)) continue;
 
         cols += key + ",";
 
-        // number
         if (key == "is_file"){
             values += it.value().get<bool>() ? "1," : "0,";
         } else if(it.value().is_number()){
@@ -942,7 +712,6 @@ http_conn::HTTP_CODE http_conn::handle_post_resource(char * text){
             values += "'" + val + "',";
         }
     }
-    // pop the last semicolon
     if(!cols.empty()) cols.pop_back();
     if(!values.empty()) values.pop_back();
 
@@ -960,10 +729,8 @@ http_conn::HTTP_CODE http_conn::handle_post_resource(char * text){
 }
 
 
-// Handle Method: PUT api/resources
-
+// Handle PUT /api/resources.
 http_conn::HTTP_CODE http_conn::handle_put_resource(char* text){
-    // protect API
     std::optional<int> user_id = UserService::get_user_id_from_token(token);
     if (user_id == std::nullopt) {
         json_res = "{\"error\":\"unauthorized\"}";
@@ -971,32 +738,26 @@ http_conn::HTTP_CODE http_conn::handle_put_resource(char* text){
         return FORBIDDEN_REQUEST;
     }
 
-    // debug
     std::string body(text);
     Logger::get_instance()->log(INFO, "PUT /api/resource body=" + body);
     json j;
 
     try {
-        // next step: parse JSON
         j = json::parse(body);
     } catch(const json::parse_error& e){
-        // malformed JSON
         json_res = "{\"error\":\"invalid JSON format\"}";
         return BAD_REQUEST;
     } catch (...){
-        // other unexpected errors
         json_res = "{\"error\":\"internal error\"}";
         return INTERNAL_ERROR;
     }
 
-    // 1. validate id
     if (!j.contains("id") || !j["id"].is_number_integer()){
         json_res = "{\"error\":\"invalid id\"}";
         return BAD_REQUEST;
     }
     int id = j["id"];
 
-    // 2. build SET clause
     std::string set_clause;
     std::set<std::string> allowed = {"id", "title", "content"};
 
@@ -1018,9 +779,8 @@ http_conn::HTTP_CODE http_conn::handle_put_resource(char* text){
         return BAD_REQUEST;
     }
 
-    set_clause.pop_back(); // remove last comma
+    set_clause.pop_back();
 
-    // 4. build SQL
     std::string sql = std::string("UPDATE resources SET ")
                         + set_clause + " WHERE user_id=" + std::to_string(user_id.value()) +
                         " AND id=" +  std::to_string(id);
@@ -1080,7 +840,6 @@ http_conn::HTTP_CODE http_conn::handle_create_upload_url(char* text) {
 
 
 // Handle GET api/files/download-url?resource_id=xx
-
 http_conn::HTTP_CODE http_conn::handle_create_download_url() {
     std::optional<int> user_id = UserService::get_user_id_from_token(token);
     if (user_id == std::nullopt) {
@@ -1114,47 +873,26 @@ http_conn::HTTP_CODE http_conn::handle_create_download_url() {
 }
 
 
-// When get a complete and correct HTTP request, we analyse the nature of the target file
-// if the target file exist & readable for all clients, not directory, use mmap to map
-// the file to memory adress m_file_address, tell the caller that target file successfully get
+// Static file serving path: map a readable file into memory for writev().
 http_conn::HTTP_CODE http_conn::do_request(){
 
-    // "/workspace/project/resources"
-    // need to update the doc_root
     strcpy(m_real_file, doc_root );
     int len = strlen( doc_root );
     strncpy( m_real_file + len, m_url, FILENAME_LEN - len - 1 );
-    // get the stat info about getting the m_real_file, in the struct
-    // m_file_stat, -1 fail, 0 sucess
+
     if ( stat( m_real_file, &m_file_stat ) < 0 ) {
         return NO_RESOURCE;
     }
 
-    // check the access right
     if ( ! ( m_file_stat.st_mode & S_IROTH ) ) {
         return FORBIDDEN_REQUEST;
     }
 
-    // check whether is directory
     if ( S_ISDIR( m_file_stat.st_mode ) ) {
         return BAD_REQUEST;
     }
 
-    // open the file with read only
     int fd = open( m_real_file, O_RDONLY );
-    // create memroy map
-    /*
-    mmap: map a file to memory
-    mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
-    addr: start of mapped memory
-    length: length of mapping
-    prot: protection flags
-    flags: flags
-    fd: file descriptor
-    offset: offset of the file
-    return: pointer to the start of mapped memory
-    we can then access the file as the array in the memory eg: m_file_address[i]
-    */
     m_file_address = ( char* )mmap( 0, m_file_stat.st_size, PROT_READ, MAP_PRIVATE, fd, 0 );
     close( fd );
     return FILE_REQUEST;
@@ -1217,7 +955,6 @@ bool http_conn::process_write(HTTP_CODE ret) {
         case FILE_REQUEST:
             add_status_line(200, ok_200_title );
             add_headers(m_file_stat.st_size, "text");
-            // points to where the m_write_buf start
             m_iv[ 0 ].iov_base = m_write_buf;
             m_iv[ 0 ].iov_len = m_write_index;
             m_iv[ 1 ].iov_base = m_file_address;
@@ -1244,57 +981,24 @@ bool http_conn::process_write(HTTP_CODE ret) {
 
 
 
-// Reverse the mapping
-// munmap to memory
+// Release memory-mapped static file content.
 void http_conn::unmap() {
-    // only reverse the valid m_file_address
     if( m_file_address )
     {
-        // m_file_address: start of mapped memory
-        // m_file_stat.st_size: length of mapping
         munmap( m_file_address, m_file_stat.st_size );
         m_file_address = 0;
     }
 }
 
 
-// write the data to be sent in the write buffer
+// Append printf-style formatted text to the response buffer.
 bool http_conn::add_response( const char* format, ... ) {
     if( m_write_index >= WRITE_BUFFER_SIZE ) {
         return false;
     }
-    // arg_list = a cursor that walks through arguments passed after format
-    /*
-        va_list is a type used to access variable arguments in a function.
-        va_start initializes the argument list by pointing to the first
-        unnamed argument after the last fixed parameter. It allows functions
-        like vsnprintf to iterate through the arguments safely.
-    */
     va_list arg_list;
     va_start( arg_list, format );
 
-    /*
-    vsnprintf: Formats a string (like printf) and writes it into a buffer safely
-    int vsnprintf(char *str, size_t size, const char *format, va_list ap);
-    - str: destination buffer
-    - size: maximum number of bytes to write
-    - format: format string ("%d %s")
-    - ap: list of arguments (from va_start)
-
-    return value: number of characters THAT WOULD HAVE BEEN WRITTEN
-    */
-
-    /*
-    va_start(arg_list, last_param);  // initialize
-    va_arg(arg_list, type);         // get next argument
-    va_end(arg_list);               // cleanup
-    */
-    /*
-    m_write_buf + m_write_index: destination address.
-    WRITE_BUFFER_SIZE - 1 - m_write_index: remaining available space.
-                                            -1 leaves room for the null terminator '\0'.
-
-    */
     int len = vsnprintf( m_write_buf + m_write_index,
                 WRITE_BUFFER_SIZE - 1 - m_write_index,
                 format, arg_list );
@@ -1308,30 +1012,36 @@ bool http_conn::add_response( const char* format, ... ) {
 }
 
 
+// Adds the HTTP status line to the response buffer.
 bool http_conn::add_status_line( int status, const char* title ) {
     return add_response( "%s %d %s\r\n", "HTTP/1.1", status, title );
 }
 
 
+// Adds the Content-Type header.
 bool http_conn::add_content_type(const char* type) {
     return add_response("Content-Type: %s\r\n", type);
 }
 
+// Adds the Content-Length header.
 bool http_conn::add_content_length(int content_len) {
     return add_response( "Content-Length: %d\r\n", content_len );
 }
 
+// Adds the connection persistence header.
 bool http_conn::add_linger()
 {
     return add_response( "Connection: %s\r\n", ( m_linger == true ) ? "keep-alive" : "close" );
 }
 
+// Ends the HTTP header block.
 bool http_conn::add_blank_line()
 {
     return add_response( "%s", "\r\n" );
 }
 
 
+// Adds the standard response headers.
 bool http_conn::add_headers(int content_len, const char* type) {
     return add_content_length(content_len)
         && add_content_type(type)
@@ -1340,6 +1050,7 @@ bool http_conn::add_headers(int content_len, const char* type) {
 }
 
 
+// Adds a plain content body to the response buffer.
 bool http_conn::add_content( const char* content )
 {
     return add_response( "%s", content );

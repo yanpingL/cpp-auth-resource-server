@@ -1,17 +1,20 @@
 #include "redis_client.h"
 #include <iostream>
 
+// Returns the shared Redis client instance used by the server.
 RedisClient* RedisClient::get_instance() {
     static RedisClient instance;
     return &instance;
 }
 
+// Opens the Redis connection used for session-token caching.
 bool RedisClient::connect(const std::string& host, int port) {
     std::lock_guard<std::mutex> lock(mtx);
     context = redisConnect(host.c_str(), port);
     return context != nullptr && !context->err;
 }
 
+// Stores a key/value pair with an expiration time.
 bool RedisClient::set(const std::string& key, const std::string& value, int expire) {
     std::lock_guard<std::mutex> lock(mtx);
     if (!context || context->err) {
@@ -28,6 +31,7 @@ bool RedisClient::set(const std::string& key, const std::string& value, int expi
     return ok;
 }
 
+// Reads a cached value by key, returning an empty string on miss or connection error.
 std::string RedisClient::get(const std::string& key) {
     std::lock_guard<std::mutex> lock(mtx);
     if (!context || context->err) {
@@ -46,6 +50,7 @@ std::string RedisClient::get(const std::string& key) {
     return res;
 }
 
+// Removes a cached key from Redis.
 bool RedisClient::del(const std::string& key) {
     std::lock_guard<std::mutex> lock(mtx);
     if (!context || context->err) {

@@ -3,6 +3,7 @@
 #include "dao/user_dao.h"
 #include "service/storage_service.h"
 
+// Creates a resource and returns a JSON status object.
 res_json ResourceService::create_resource(const std::string& sql){
 
      bool ok = ResourceDAO::create_resource(sql);
@@ -16,7 +17,7 @@ res_json ResourceService::create_resource(const std::string& sql){
      return res;
 }
 
-
+// Returns all resources for a user as a JSON array.
 res_json ResourceService::get_resources(int user_id){
      auto vec = ResourceDAO::get_resources(user_id);
      
@@ -40,7 +41,7 @@ res_json ResourceService::get_resources(int user_id){
      return res;
 }
 
-
+// Returns one resource as a JSON object.
 res_json ResourceService::get_resource(int user_id, int id){
      auto resource = ResourceDAO::get_resource(user_id, id);
 
@@ -59,7 +60,7 @@ res_json ResourceService::get_resource(int user_id, int id){
      return res;
 }
 
-
+// Creates a presigned download URL for a file resource.
 res_json ResourceService::get_file_download_url(int user_id, int id){
      auto resource = ResourceDAO::get_resource(user_id, id);
 
@@ -78,7 +79,7 @@ res_json ResourceService::get_file_download_url(int user_id, int id){
      return StorageService::create_download_url(r.content);
 }
 
-
+// Updates a resource and returns a JSON status object.
 res_json ResourceService::update_resource(const std::string& sql){
      bool ok = ResourceDAO::update_resource(sql);
 
@@ -91,7 +92,7 @@ res_json ResourceService::update_resource(const std::string& sql){
      return res;
 }
 
-
+// Deletes a resource and removes the MinIO object when the resource is a file.
 res_json ResourceService::delete_resource(int user_id, int id){
      auto resource = ResourceDAO::get_resource(user_id, id);
      if (!resource.has_value()) {

@@ -30,15 +30,13 @@ using json = nlohmann::ordered_json;
 
 class http_conn {
 public:
-    // Public static class variable member not belong to any instance
-    // Shared by all instance
-    // Accessible everywhere
-    static int m_epollfd; // All  connections share a single epoll instance, set it to static
-    static int m_user_count; // #users
+    // Shared by all active HTTP connections.
+    static int m_epollfd;
+    static int m_user_count;
 
-    static const int READ_BUFFER_SIZE = 2048; // size of read buffer
-    static const int WRITE_BUFFER_SIZE = 1024; //size of write buffer
-    static const int FILENAME_LEN = 200;   
+    static const int READ_BUFFER_SIZE = 2048;
+    static const int WRITE_BUFFER_SIZE = 1024;
+    static const int FILENAME_LEN = 200;
 
     enum METHOD {GET = 0, POST = 1, HEAD = 2, PUT = 3, DELETE = 4};
     
@@ -66,107 +64,99 @@ public:
                     FORBIDDEN_REQUEST, FILE_REQUEST, INTERNAL_ERROR, CLOSED_CONNECTION,
                     GET_RESOURCE, ADD_RESOURCE, UPDATE_RESOURCE, DELETE_RESOURCE};
     
-    // 3 possible states of state machine --> read state of line:
-    // 1.read complete line 2.error in line 3.incomplete data of the line
+    // Line parser result while scanning CRLF-delimited HTTP input.
     enum LINE_STATUS { LINE_OK = 0, LINE_BAD = 1, LINE_OPEN = 2 };
 
 
     http_conn() {};
     ~http_conn() {};
 
-    void init(int sockfd, const sockaddr_in &addr); // Init newly connected sock
-    void process(); // Process the request received from client
-    bool read(); //Non-blocking read from connection socket to the read buffer
-    bool write(); //Non blocking write from write buffer to connection socket
-    void close_conn(); // Close connection
+    void init(int sockfd, const sockaddr_in &addr);
+    void process();
+    bool read();
+    bool write();
+    void close_conn();
 
 
 private:
-    void init(); // Initialize other info
+    void init();
 
-    HTTP_CODE process_read();  //Parse the request of HTTP stoed in read buffer
+    HTTP_CODE process_read();
 
-    // ==================================================================================
-    // The following functions are called by the process_read to parse the HTTP request
-    LINE_STATUS parse_line(); // Parse one line, check based on \r\n
-    char * get_line() { return m_read_buf + m_start_line;} // Move the pointer to the next parseing position
-    HTTP_CODE parse_request_line(char * text);  // Process request line 
-    HTTP_CODE parse_headers(char * text);   // Parse request header
-    HTTP_CODE parse_content(char * text);  // Parse request body
-    //===================================================================================
+    // Request parsing helpers used by process_read().
+    LINE_STATUS parse_line();
+    char * get_line() { return m_read_buf + m_start_line;} // Current line start in read buffer
+    HTTP_CODE parse_request_line(char * text);
+    HTTP_CODE parse_headers(char * text);
+    HTTP_CODE parse_content(char * text);
 
-    // ======================== RESTful API business logic handlers ================================
-    HTTP_CODE handle_register(char* text);  // Register new account
-    HTTP_CODE handle_login(char* text);  // User login
-    HTTP_CODE handle_logout(); // User logout
-    
-    void parse_query(char* query_string, std::string& key, std::string& value);  // Helper function to parse key and value 
-    HTTP_CODE handle_get_resources();    // Return list of resources or specific resource of user
-    HTTP_CODE handle_delete_resource();  // Handle Delete resoruce request
-    HTTP_CODE handle_post_resource(char * text);  // Handle create new resource 
-    HTTP_CODE handle_put_resource(char * text);   // Handle modify the resource
-    
-    HTTP_CODE handle_create_upload_url(char* text); // Create upload url
-    HTTP_CODE handle_create_download_url();  // Created download url
-    // ===========================================================================================
+    // RESTful API business logic handlers.
+    HTTP_CODE handle_register(char* text);
+    HTTP_CODE handle_login(char* text);
+    HTTP_CODE handle_logout();
+
+    void parse_query(char* query_string, std::string& key, std::string& value);
+    HTTP_CODE handle_get_resources();
+    HTTP_CODE handle_delete_resource();
+    HTTP_CODE handle_post_resource(char * text);
+    HTTP_CODE handle_put_resource(char * text);
+
+    HTTP_CODE handle_create_upload_url(char* text);
+    HTTP_CODE handle_create_download_url();
 
     // Static file serve
     HTTP_CODE do_request();
 
 
-    bool process_write(HTTP_CODE ret); // Create the HTTP response
+    bool process_write(HTTP_CODE ret);
 
-    // ============ Helper functions to generate response used by [process_write] ====================
-    // GThe following functions are called by the process_write() to create the HTTP response
-    void unmap(); // Release the memory used by mmap
-    bool add_response( const char* format, ... ); 
+    // Response construction helpers used by process_write().
+    void unmap();
+    bool add_response( const char* format, ... );
 
-    bool add_status_line( int status, const char* title ); // Add response status [eg.400 Bad Request]
+    bool add_status_line( int status, const char* title );
 
-    bool add_content_type(const char* type); // Add [content-type] in header
-    bool add_content_length( int content_length ); // Add [Content-Length] in header
-    bool add_linger(); // Add [Connection: keep-alive] in header
-    bool add_blank_line(); // Add blank_line after the header
-    bool add_headers( int content_length, const char* content_type ); // Generate response hearder by calling the above functions
-    
-    bool add_content( const char* content ); // Add response content
-    // ==============================================================================================
+    bool add_content_type(const char* type);
+    bool add_content_length( int content_length );
+    bool add_linger();
+    bool add_blank_line();
+    bool add_headers( int content_length, const char* content_type );
 
-
+    bool add_content( const char* content );
 
 private:
-    int m_sockfd; // Socket connected with this HTTP connection
-    sockaddr_in m_address; //Connection's network address information(IP addr + port)
+    int m_sockfd;               // Client socket for this connection.
+    sockaddr_in m_address;      // Client network address.
 
-    char m_read_buf[READ_BUFFER_SIZE]; // Read buffer
-    int m_read_index; // Mark the next position to read
+    char m_read_buf[READ_BUFFER_SIZE];  // Raw request bytes read from the socket.
+    int m_read_index;                   // Next read position in m_read_buf.
 
-    // ================= Variables for parse operation ==========================
-    int m_checked_index;  // The position of the character currently being processed in the read buffer
-    int m_start_line;  // The beginning position of the line currently being parsed
+    // Parser cursor state inside m_read_buf.
+    int m_checked_index;        // Current scan position.
+    int m_start_line;           // Start offset of the current line.
 
-    CHECK_STATE m_check_stat;  // Current parsing state of host state machine
-    METHOD m_method;   // Request method
+    CHECK_STATE m_check_stat;   // Current HTTP parser state.
+    METHOD m_method;            // Parsed HTTP method.
 
 
-    char m_real_file[ FILENAME_LEN ];       // The full path of the target file, doc_root + m_url, doc_root is the root directory of the website
-    char* m_url;                            // Target file name requested by the client
-    char* m_version;                        // HTTP version, only support 1.1
-    char* m_host;                           // Host name
-    int m_content_length;                   // Total length of the HTTP request
-    bool m_linger;                          // Whether keep the connection
-    std::string token;                      // Token 
+    char m_real_file[ FILENAME_LEN ];   // Resolved static file path.
+    char* m_url;                        // Parsed request target.
+    char* m_version;                    // Parsed HTTP version.
+    char* m_host;                       // Parsed Host header.
+    int m_content_length;               // Request body length from headers.
+    bool m_linger;                      // Whether to keep the connection alive.
+    std::string token;                  // Bearer token from Authorization header.
 
-    std::string json_res;                   // String to store the JSON format result
-    int apireq;                            // Check the type of API request
-    
+    std::string json_res;       // JSON response body for API requests.
+    int apireq;                 // Internal route marker for API handlers.
 
-    char m_write_buf[ WRITE_BUFFER_SIZE ];      //  Write buffer
-    int m_write_index;                          //  Where the next write should start
-    char* m_file_address;                       //  Start position in the memory of the mmap file 
-    struct stat m_file_stat;                    //  State of the target file, with which to check if the file exist, is dictionary or not, readable or note, file size
-    struct iovec m_iv[2];                       //  Use writev to write, m_iv_count represents the number of memory blocks
-    int m_iv_count;    
+
+    char m_write_buf[ WRITE_BUFFER_SIZE ];  // Response header / small-body buffer.
+    int m_write_index;                      // Next write position in m_write_buf.
+    char* m_file_address;                   // mmap address for static file responses.
+    struct stat m_file_stat;                // Metadata for the requested static file.
+    struct iovec m_iv[2];                   // writev buffers: headers plus body/file.
+    int m_iv_count;                         // Number of active iovec entries.
 };
 
 

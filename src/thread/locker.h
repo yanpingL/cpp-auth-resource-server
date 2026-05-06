@@ -5,9 +5,7 @@
 #include <exception>
 #include <semaphore.h>
 
-// threads synchonisation mechanism class
-// exclusive mutex class
-// ---------------------------------------------------------------
+// RAII-style wrappers for pthread synchronization primitives.
 class locker {
 public:
     locker() {
@@ -36,9 +34,6 @@ private:
     pthread_mutex_t m_mutex;
 };
 
-
-// condition variable class
-// ------------------------------------------------------------
 class cond {
 public:
     cond(){
@@ -70,9 +65,6 @@ private:
     pthread_cond_t m_cond;
 };
 
-
-// signal class
-// --------------------------------------------------------------
 class sem {
 public:
     sem(){
@@ -99,12 +91,10 @@ public:
         return sem_init(&m_sem, 0, num) == 0;
     }
 
-    //the signal to decrement the value of sem
     bool wait(){
         return sem_wait(&m_sem) == 0;
     }
 
-    // add the signal num
     bool post(){
         return sem_post(&m_sem) == 0;
     }
@@ -115,4 +105,4 @@ private:
 };
 
 
-#endif 
+#endif

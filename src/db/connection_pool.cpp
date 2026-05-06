@@ -2,11 +2,13 @@
 #include "connection_pool.h"
 #include "thread/locker.h"
 
+// Initializes connection counters for the singleton pool.
 connection_pool::connection_pool(){
     cur_conn = 0;
     free_conn = 0;
 }
 
+// Closes all MySQL connections still owned by the pool.
 connection_pool::~connection_pool() {
     while (!conn_list.empty()) {
         MYSQL* conn = conn_list.front();
@@ -15,11 +17,13 @@ connection_pool::~connection_pool() {
     }
 }
 
+// Returns the shared MySQL connection pool instance.
 connection_pool* connection_pool::get_instance() {
     static connection_pool instance;
     return &instance;
 }
 
+// Opens the configured number of MySQL connections.
 void connection_pool::init(std::string url, std::string user,
     std::string password, std::string db_name,
     int port, int max_conn) {
@@ -31,7 +35,7 @@ void connection_pool::init(std::string url, std::string user,
     this->port = port;
     this->max_conn = max_conn;
 
-    for (int i = 0; i < max_conn; i++) {    
+    for (int i = 0; i < max_conn; i++) {
         MYSQL* conn = mysql_init(NULL);
 
         if (!conn) {
@@ -64,11 +68,11 @@ void connection_pool::init(std::string url, std::string user,
     }
 }
 
-
+// Blocks until a connection is available, then leases it to the caller.
 MYSQL* connection_pool::get_connection() {
     MYSQL* conn = NULL;
 
-    reserve.wait();     // decrement the value by 1
+    reserve.wait();
     lock.lock();
     if (conn_list.empty()) {
         lock.unlock();
@@ -85,7 +89,7 @@ MYSQL* connection_pool::get_connection() {
     return conn;
 }
 
-
+// Returns a leased connection back to the pool.
 bool connection_pool::release_connection(MYSQL* conn) {
     if (!conn) return false;
 
@@ -95,12 +99,12 @@ bool connection_pool::release_connection(MYSQL* conn) {
     cur_conn--;
 
     lock.unlock();
-    reserve.post(); // add the value by 1
+    reserve.post();
 
     return true;
 }
 
-
+// Reports the number of currently idle MySQL connections.
 int connection_pool::get_free_conn() {
     return free_conn;
 }

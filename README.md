@@ -34,6 +34,30 @@ backend -> client: return presigned MinIO GET URL
 client -> MinIO: download file bytes
 ```
 
+## Project Highlights
+
+**Tech Stack:** C++, Linux `epoll`, multithreading, RESTful API, MySQL, Redis, Docker, Nginx, Git.
+
+- Built a high-performance multi-user backend system supporting authenticated CRUD operations and file upload/download through RESTful APIs.
+- Implemented an event-driven HTTP server using `epoll`-based Reactor non-blocking I/O and a custom thread pool, avoiding thread-per-connection overhead.
+- Designed a layered `Network -> Service -> DAO` architecture to separate HTTP handling, business logic, and database access.
+- Developed a thread-safe MySQL connection pool with semaphore-based control to reduce connection contention under concurrent workloads.
+- Implemented token-based authentication with Redis TTL caching and MySQL persistent session storage, following a cache-aside validation pattern.
+- Deployed multiple C++ server instances behind Nginx load balancing and containerized the full system with Docker Compose.
+- Benchmarked approximately **4.9k requests/sec** under **1,000 concurrent connections** through Nginx load balancing, with **p90 latency around 221 ms**, **p99 latency around 247 ms**, and **0 errors** during the test.
+
+## Benchmark Summary
+
+Example load test result:
+
+```text
+Concurrency: 1,000
+Throughput: ~4.9k requests/sec
+p90 latency: ~221 ms
+p99 latency: ~247 ms
+Errors: 0
+```
+
 ## Architecture
 
 ### System Flow Model

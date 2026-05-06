@@ -9,6 +9,7 @@
 std::string UserDAO::msg;
 
 
+// Executes an INSERT-style user/session SQL statement.
 bool UserDAO::create_user(const std::string& sql) {
     connection_pool* pool = connection_pool::get_instance();
     MYSQL* conn = pool->get_connection();
@@ -30,8 +31,8 @@ bool UserDAO::create_user(const std::string& sql) {
 
 
 
+// Loads one user by numeric id.
 std::optional<User> UserDAO::get_user_by_id(int id){
-    // get the shared single instance 
     connection_pool* pool = connection_pool::get_instance();
     MYSQL* conn = pool->get_connection();
 
@@ -78,6 +79,7 @@ std::optional<User> UserDAO::get_user_by_id(int id){
 
 
 
+// Loads one user by email for login.
 std::optional<User> UserDAO::get_user_by_email(const std::string& email){
 
     connection_pool* pool = connection_pool::get_instance();
@@ -124,7 +126,7 @@ std::optional<User> UserDAO::get_user_by_email(const std::string& email){
     user.id = atoi(row[0]);
     user.name = row[1];
     user.email = row[2];
-    user.password = row[3];   // ⚠️ add this field
+    user.password = row[3];
 
     mysql_free_result(result);
     pool->release_connection(conn);
@@ -134,6 +136,7 @@ std::optional<User> UserDAO::get_user_by_email(const std::string& email){
 
 
 
+// Executes a user UPDATE statement and reports whether a row changed.
 bool UserDAO::update_user(const std::string& sql) {
     connection_pool* pool = connection_pool::get_instance();
     MYSQL* conn = pool->get_connection();
@@ -162,6 +165,7 @@ bool UserDAO::update_user(const std::string& sql) {
 
 
 
+// Deletes a user by id.
 bool UserDAO::delete_user(int id) {
     connection_pool* pool = connection_pool::get_instance();
     MYSQL* conn = pool->get_connection();
@@ -170,7 +174,6 @@ bool UserDAO::delete_user(int id) {
         msg = std::string("DB connection failed.");
         return false;
     }
-    // Need to change the name of the DB to make it changeable 
     std::string sql =
         "DELETE FROM users WHERE id=" + std::to_string(id);
     Logger::get_instance()->log(DEBUG, "SQL: " + sql);
@@ -194,13 +197,13 @@ bool UserDAO::delete_user(int id) {
 }
 
 
+// Validates a session token through Redis first, then MySQL.
 bool UserDAO::validate_token(const std::string& token) {
-    // Try Redis first
     std::string user_id =
         RedisClient::get_instance()->get(token);
-    
+
     if (!user_id.empty()){
-        return true;  // fast path
+        return true;
     }
 
     // Redis miss -> fallback to DB
@@ -235,7 +238,6 @@ bool UserDAO::validate_token(const std::string& token) {
 
     MYSQL_ROW row = mysql_fetch_row(result);
 
-    // Cache it back to Redis
     if (row != nullptr){
         std::string uid = row[0];
         RedisClient::get_instance()->set(token, uid, 3600);
@@ -249,11 +251,10 @@ bool UserDAO::validate_token(const std::string& token) {
 
 
 
+// Removes a session token from Redis and MySQL.
 bool UserDAO::delete_session(const std::string& token) {
-    // delete from Redis
     RedisClient::get_instance()->del(token);
 
-    // delete from DB
     connection_pool* pool = connection_pool::get_instance();
     MYSQL* conn = pool->get_connection();
 
@@ -274,12 +275,14 @@ bool UserDAO::delete_session(const std::string& token) {
 
 
 
+// Resolves a valid session token to the owning user id.
 std::optional<int> UserDAO::get_user_id_from_token(const std::string& token) {
 
     std::string uid = RedisClient::get_instance()->get(token);
     if (!uid.empty()) {
         return std::stoi(uid);
     }
+
     // data miss in Redis, fallback to DB
     connection_pool* pool = connection_pool::get_instance();
     MYSQL* conn = pool->get_connection();
@@ -308,7 +311,6 @@ std::optional<int> UserDAO::get_user_id_from_token(const std::string& token) {
 
     int user_id = atoi(row[0]);
 
-    // cache back to Redis
     RedisClient::get_instance()->set(token, std::to_string(user_id), 3600);
 
     mysql_free_result(result);

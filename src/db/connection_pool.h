@@ -23,21 +23,19 @@ private:
     ~connection_pool();
 
 private:
-    int max_conn; // maximum # connection to DB
-    int cur_conn; // # connection to DB currently being used
-    int free_conn; // # connections to DB currently free
+    int max_conn;
+    int cur_conn;
+    int free_conn;
 
-    locker lock; 
-    sem reserve; 
+    locker lock;
+    sem reserve;
 
-    // queue of MYSQL* to store the pointer of DB connections
-    std::queue<MYSQL*> conn_list; 
-    
+    std::queue<MYSQL*> conn_list;
 
-    std::string url;          // container name 
-    std::string user;        // user name
-    std::string password;   // password
-    std::string db_name;   // db name
+    std::string url;
+    std::string user;
+    std::string password;
+    std::string db_name;
     int port;
 };
 
