@@ -65,3 +65,8 @@ json_type UserService::login(const std::string& email, const std::string& passwo
 
     return res;
 }
+
+
+std::optional<int> UserService::get_user_id_from_token(const std::string& token) {
+    return UserDAO::get_user_id_from_token(token);
+}

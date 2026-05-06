@@ -9,6 +9,13 @@
 #include <string>
 #include <set>
 
+/*
+use namespace
+1. Avoids polluting the global namesapce
+2. Prevents name collisions with helpers in other .cpp files
+3. Makes the intent clear: these functions are private implementatio details of this file
+4. Lets the compiler optimise more freely because the functions are not externally visible
+*/
 namespace {
 
 struct MinioEndpoint {
