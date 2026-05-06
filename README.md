@@ -1,4 +1,4 @@
-# C++ Webserver
+# C++ Auth Resource Server
 
 A Scalable C++17 HTTP web server with user authentication, resource management, Redis-backed sessions, MySQL persistence, Nginx load balancing, and MinIO file storage.
 
