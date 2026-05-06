@@ -24,10 +24,8 @@
 #define MAX_FD 65535  // maximum #file descriptors
 #define MAX_EVENT_NUMBER 10000  // maximum #events to be listned
 
-//172.18.0.2
-
-// when one part disconnect, the other part is not closed, some signals may be recieved
-// we need to process that signal
+// When one part disconnect, the other part is not closed, some signals may be recieved
+// We need to process that signal
 void addsig(int sig, void(handler)(int)){
     struct sigaction sa;
     memset(&sa, '\0', sizeof(sa));
@@ -37,18 +35,20 @@ void addsig(int sig, void(handler)(int)){
     sigaction(sig, &sa, NULL);
 }
 
+/*
+extern: there is a function named [removedfd] with this signature somewhere else.
+The linker should find it.
+*/
 
-// help fucntion to add fd into epoll, not belongs to http_conn class, so we need keywor
-//  extern to tell compilor 
+// Help fucntion to add fd into epoll, not belongs to http_conn class, so we need keywor
+// extern to tell compilor 
 // also delete from epoll
 extern void removefd(int epollfd, int fd);
-// modify the fd
-extern void modfd(int epollfd, int fd, int ev);
-
+extern void modfd(int epollfd, int fd, int ev);  // modify the fd
 extern void addfd(int epollfd, int fd, bool one_shot);
 
 
-// set the port number by command line
+// Set the port number by command line
 int main(int argc, char* argv[]){
 
     if(argc <= 1){
@@ -60,7 +60,7 @@ int main(int argc, char* argv[]){
 
     int port = atoi(argv[1]);
 
-    // process the sigpie
+    // Process the sigpie
     addsig(SIGPIPE, SIG_IGN);
 
     // creat thread pool and initiate the pool
@@ -82,17 +82,25 @@ int main(int argc, char* argv[]){
         10   // pool size
     );
 
-    // initalise the RedisClient instance
+    // Initalise the RedisClient instance
     RedisClient::get_instance()->connect("sys-redis", 6379);
     
-    // creat the logger instance and initalize it
+    // Creat the logger instance and initalize it
     Logger::get_instance()->init("server.log");
 
-    // create an array to store all of the client infos, connection info
+    // Create an array to store all of the client infos, connection info
     http_conn * users = new http_conn[MAX_FD];
 
+    // Get the listen fd
     int listenfd = socket(PF_INET, SOCK_STREAM, 0);
     // check error
+    if (listenfd == -1){
+        perror("socket");
+        Logger::get_instance()->log(ERROR, "listen socket fails.");
+        delete [] users;
+        delete pool;
+        return 1;
+    }
 
     // set socket complexing before bind
     // Allow the socket to reuse a local address (IP + port) immediately.
@@ -175,7 +183,8 @@ int main(int argc, char* argv[]){
                 // detect write task in task queue, main thread writes from the write buffer
                 // of the connection task to the socket
                 if(!users[sockfd].write()) {
-                    // fail to write in one time, close connection.
+                    // 1) fail to write in one time, close connection.
+                    // 2) or the write finihsed, but the connection should be closed, as "keep_alive" = false
                     users[sockfd].close_conn();
                 }
             }
@@ -185,7 +194,6 @@ int main(int argc, char* argv[]){
     close(listenfd);
     delete [] users;
     delete pool;
-    
 
     return 0;
 }
@@ -196,7 +204,6 @@ int main(int argc, char* argv[]){
 This system simulate the Proactor pattern by 
 - Letting the main thread handle the read & write from/to socket to/from
 buffer write(), read()
-- & the other threads process the data read & generate response
-    process_read(), process_write()
+- Worker threads process the data  & generate response process_read(), process_write()
 
 */

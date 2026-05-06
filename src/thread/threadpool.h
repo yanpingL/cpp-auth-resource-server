@@ -17,15 +17,9 @@ public:
     ~threadpool();
     bool append(T *request);
 
-
-
 private:
     static void * worker(void *arg);
     void run();
-
-
-
-
 
 private:
     // number of threads
@@ -60,7 +54,7 @@ m_stop(false), m_threads(NULL) {
         if ((thread_number <= 0) || (max_requests <= 0)){
             throw std::exception();
         }
-
+        // initialize the semaphore
         m_threads = new pthread_t[m_thread_number];
         if (!m_threads) {
             throw std::exception();
@@ -68,14 +62,14 @@ m_stop(false), m_threads(NULL) {
 
         // create thread_number threads and detach them
         for (int i = 0; i < thread_number; ++i){
-            std::cout << "Create the " << i << "th thread\n";
+            // std::cout << "Create the " << i << "th thread\n";
             Logger::get_instance()->log(INFO, "Create thread " + std::to_string(i));
-            
-            // create a thread and ask it to wait for task availabel in the m_workqueue
+            // create a thread
             if(pthread_create(m_threads + i, NULL, worker, this) != 0) {
                 delete [] m_threads;
                 throw std::exception();
             }
+            // ask it to wait for task available in the m_workqueue
             if (pthread_detach(m_threads[i])){
                 delete[] m_threads;
                 throw std::exception();
@@ -89,7 +83,6 @@ threadpool<T>::~threadpool(){
     delete[]m_threads;
     m_stop = 1;
 }
-
 
 template<typename T>
 bool threadpool<T>::append(T *request){
@@ -122,7 +115,7 @@ template<typename T>
 void threadpool<T>::run(){
     while(!m_stop) {
         // get a task from the request queue
-        // have sem value, --1
+        // have sem value-1
         // no value, block until value > 0, then any one of blocked thread will be woken up
         m_queuestat.wait();
         m_queuelocker.lock();
@@ -138,7 +131,6 @@ void threadpool<T>::run(){
         if(!request){ 
             continue;
         }
-
         request->process();
     }
 }

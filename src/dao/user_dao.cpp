@@ -280,7 +280,7 @@ std::optional<int> UserDAO::get_user_id_from_token(const std::string& token) {
     if (!uid.empty()) {
         return std::stoi(uid);
     }
-
+    // data miss in Redis, fallback to DB
     connection_pool* pool = connection_pool::get_instance();
     MYSQL* conn = pool->get_connection();
 
