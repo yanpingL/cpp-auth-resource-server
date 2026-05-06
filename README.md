@@ -60,6 +60,23 @@ Errors: 0
 
 ## Architecture
 
+### Project Directory Structure
+
+```text
+.
+├── src
+│   ├── cache
+│   ├── dao
+│   ├── db
+│   ├── network
+│   ├── resources
+│   │   └── images
+│   ├── service
+│   ├── thread
+│   └── utils
+└── tests
+```
+
 ### System Flow Model
 
 The project can be understood in two layers: the deployed system around the server, and the internal request path inside each C++ webserver process.
