@@ -112,7 +112,7 @@ Inside each C++ webserver, a request moves through the program like this:
 ```text
 main.cpp
   - Creates listen socket.
-  - Uses epoll to watch client connections.
+  - Uses epoll to tack client connections.
   - Accepts new sockets and assigns them to http_conn objects.
   - Pushes readable connections into the thread pool.
 
