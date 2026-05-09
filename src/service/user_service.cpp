@@ -1,11 +1,17 @@
 #include "user_service.h"
 #include "dao/user_dao.h"
 #include "utils/auth_utils.h"
-#include "cache/redis_client.h"
 
 // Creates a user and returns a JSON status object.
-json_type UserService::create_user(const std::string& sql) {
-    bool ok = UserDAO::create_user(sql);
+json_type UserService::create_user(const UserInfo& Info) {
+    // First hash the password
+    std::string pass = sha256(Info.password);
+
+    User newUser;
+    newUser.name = Info.name;
+    newUser.email = Info.email;
+    newUser.password = pass;
+    bool ok = UserDAO::create_user(newUser);
 
     json_type res;
 
@@ -14,49 +20,40 @@ json_type UserService::create_user(const std::string& sql) {
     } else {
         res["status"] = "created";
     }
-
     return res;
 }
 
 
 
 // Authenticates a user, creates a session token, and returns login JSON.
-json_type UserService::login(const std::string& email, const std::string& password) {
+json_type UserService::login(const UserInfo& Info) {
 
-    auto user_opt = UserDAO::get_user_by_email(email);
+    auto user_opt = UserDAO::get_user_by_email(Info.email);
 
     json_type res;
 
     if (!user_opt.has_value()) {
-        res["error"] = "user not found";
+        res["error"] = "User not found";
         return res;
     }
 
     const auto& user = user_opt.value();
-
-    if (user.password != sha256(password)) {
+    // Compare password hash value
+    if (user.password != sha256(Info.password)) {
         res["error"] = "wrong password";
         return res;
     }
-
+    // Generate Token
     std::string token = generate_token();
     if (token.empty()) {
         res["error"] = "token generation failed";
         return res;
     }
-
-    // Cache the session in Redis and persist it in MySQL as fallback.
-    RedisClient::get_instance()->set(
-        token,
-        std::to_string(user.id),
-        3600
-    );
-
-    std::string sql =
-        "INSERT INTO sessions (user_id, token, expires_at) VALUES (" +
-        std::to_string(user.id) + ", '" + token +"', NOW() + INTERVAL 1 HOUR)";
-
-    UserDAO::create_user(sql);
+    // Create user session
+    if (!UserDAO::create_session(user.id, token, 3600)) {
+        res["error"] = UserDAO::msg;
+        return res;
+    }
 
     res["token"] = token;
     res["user_id"] = user.id;

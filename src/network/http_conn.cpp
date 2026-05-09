@@ -461,11 +461,7 @@ http_conn::HTTP_CODE http_conn::handle_register(char * text){
             return INTERNAL_ERROR;
         }
 
-        if (!j.contains("id") || !j["id"].is_number_integer()){
-            json_res = "{\"error\":\"invalid id\"}";
-            return BAD_REQUEST;
-        }
-
+        // Field validation
         if (!j.contains("name") || !j["name"].is_string() ||
             !j.contains("email") || !j["email"].is_string() ||
             !j.contains("password") || !j["password"].is_string()) {
@@ -474,7 +470,7 @@ http_conn::HTTP_CODE http_conn::handle_register(char * text){
         }
 
 
-        
+        /*
         std::set<std::string> allowed = {"id", "name", "email", "password"};
         std::string cols;
         std::string values;
@@ -502,9 +498,14 @@ http_conn::HTTP_CODE http_conn::handle_register(char * text){
         std::string sql =  std::string("INSERT INTO users ") +
                             "(" + cols + ") values (" + values + ")";
         Logger::get_instance()->log(DEBUG, "SQL: " + sql);
+        */
+        UserInfo info;
+        info.name = j["name"];
+        info.email = j["email"];
+        info.password = j["password"];
         
 
-        json res = UserService::create_user(sql);
+        json res = UserService::create_user(info);
         json_res = res.dump();
         if (res.contains("error")){
             return BAD_REQUEST;
@@ -531,24 +532,25 @@ http_conn::HTTP_CODE http_conn::handle_login(char* text) {
         return INTERNAL_ERROR;
     }
 
-
-    if (!j.contains("email") || !j.contains("password")) {
+    // Field Validation
+    if (!j.contains("email") || !j["email"].is_string() ||
+        !j.contains("password") || !j["password"].is_string()) {
         json_res = "{\"error\":\"missing fields\"}";
         Logger::get_instance()->log(ERROR, json_res);
         return BAD_REQUEST;
     }
 
-    std::string email = j["email"];
-    std::string password = j["password"];
+    UserInfo info;
+    info.email = j["email"];
+    info.password = j["password"];
 
-    json res = UserService::login(email, password);
+    json res = UserService::login(info);
     json_res = res.dump();
 
     if (res.contains("error")) {
         Logger::get_instance()->log(ERROR, res["error"]);
         return BAD_REQUEST;
     }
-
     return GET_RESOURCE;
 }
 

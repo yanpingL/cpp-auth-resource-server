@@ -10,15 +10,25 @@ std::string UserDAO::msg;
 
 
 // Executes an INSERT-style user/session SQL statement.
-bool UserDAO::create_user(const std::string& sql) {
+bool UserDAO::create_user(const User& user) {
     connection_pool* pool = connection_pool::get_instance();
     MYSQL* conn = pool->get_connection();
 
+    // Check the connection acquisition success
     if (!conn) {
         msg = std::string("DB connection failed.");
         Logger::get_instance()->log(ERROR, msg);
         return false;
     }
+
+    // Generate the query statement
+    std::string sql = 
+        "INSERT INTO users (name, email, password) VALUES ('" + 
+        user.name + "', '" + 
+        user.email + "', '" + 
+        user.password + "')";
+
+
     bool success = (mysql_query(conn, sql.c_str()) == 0);
     if (!success) {
         msg = std::string("Query failed: ") + mysql_error(conn);
@@ -190,6 +200,42 @@ bool UserDAO::delete_user(int id) {
         msg = std::string("Resource not found.");
         Logger::get_instance()->log(ERROR, msg);
 
+    }
+
+    pool->release_connection(conn);
+    return success;
+}
+
+// Creates a login session in Redis and MySQL.
+bool UserDAO::create_session(int user_id, const std::string& token, int ttl_seconds) {
+    RedisClient::get_instance()->set(
+        token,
+        std::to_string(user_id),
+        ttl_seconds
+    );
+
+    connection_pool* pool = connection_pool::get_instance();
+    MYSQL* conn = pool->get_connection();
+
+    if (!conn) {
+        msg = std::string("DB connection failed.");
+        Logger::get_instance()->log(ERROR, msg);
+        RedisClient::get_instance()->del(token);
+        return false;
+    }
+
+    std::string sql =
+        "INSERT INTO sessions (user_id, token, expires_at) VALUES (" +
+        std::to_string(user_id) + ", '" + token + "', NOW() + INTERVAL " +
+        std::to_string(ttl_seconds) + " SECOND)";
+
+    Logger::get_instance()->log(DEBUG, "SQL: " + sql);
+
+    bool success = (mysql_query(conn, sql.c_str()) == 0);
+    if (!success) {
+        msg = std::string("Query failed: ") + mysql_error(conn);
+        Logger::get_instance()->log(ERROR, msg + " SQL: " + sql);
+        RedisClient::get_instance()->del(token);
     }
 
     pool->release_connection(conn);
