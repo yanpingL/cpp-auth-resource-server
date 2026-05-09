@@ -38,6 +38,31 @@ extern void removefd(int epollfd, int fd);
 extern void modfd(int epollfd, int fd, int ev);
 extern void addfd(int epollfd, int fd, bool one_shot);
 
+namespace {
+
+std::string get_env_or_default(const char* name, const std::string& fallback) {
+    const char* value = std::getenv(name);
+    if (value == nullptr || value[0] == '\0') {
+        return fallback;
+    }
+    return value;
+}
+
+int get_env_int_or_default(const char* name, int fallback) {
+    const char* value = std::getenv(name);
+    if (value == nullptr || value[0] == '\0') {
+        return fallback;
+    }
+
+    char* end = nullptr;
+    long parsed = std::strtol(value, &end, 10);
+    if (end == value || *end != '\0') {
+        return fallback;
+    }
+    return static_cast<int>(parsed);
+}
+
+} // namespace
 
 // Set the port number by command line
 // Boots the server, initializes shared services, and runs the epoll event loop.
@@ -64,11 +89,11 @@ int main(int argc, char* argv[]){
 
     connection_pool* connPool = connection_pool::get_instance();
     connPool->init(
-        "sys-mysql",
-        "webuser",
-        "webpass123",
-        "webdb",
-        3306,
+        get_env_or_default("POSTGRES_HOST", "postgres"),
+        get_env_or_default("POSTGRES_USER", "webuser"),
+        get_env_or_default("POSTGRES_PASSWORD", "webpass123"),
+        get_env_or_default("POSTGRES_DB", "webdb"),
+        get_env_int_or_default("POSTGRES_PORT", 5432),
         10
     );
 

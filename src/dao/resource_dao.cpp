@@ -2,17 +2,44 @@
 #include "db/connection_pool.h"
 #include "utils/logger.h"
 
-#include <mysql/mysql.h>
+#include <cstdlib>
 #include <iostream>
 
 std::string ResourceDAO::msg;
 
+namespace {
+
+bool command_ok(PGconn* conn, PGresult* result, const std::string& sql, std::string& msg) {
+    bool success = PQresultStatus(result) == PGRES_COMMAND_OK;
+    if (!success) {
+        msg = std::string("Query failed: ") + PQerrorMessage(conn);
+        Logger::get_instance()->log(ERROR, msg + " SQL: " + sql);
+    }
+    return success;
+}
+
+bool affected_rows(PGresult* result) {
+    const char* rows = PQcmdTuples(result);
+    return rows != nullptr && rows[0] != '\0' && std::atoi(rows) > 0;
+}
+
+bool pg_bool_value(PGresult* result, int row, int col) {
+    const char* value = PQgetvalue(result, row, col);
+    return value != nullptr && (value[0] == 't' || value[0] == '1');
+}
+
+std::string nullable_value(PGresult* result, int row, int col) {
+    return PQgetisnull(result, row, col) ? "" : PQgetvalue(result, row, col);
+}
+
+} // namespace
+
 // Executes a resource INSERT statement.
-bool ResourceDAO::create_resource(const Resource& resource){
+bool ResourceDAO::create_resource(const Resource& resource) {
     msg.clear();
 
     connection_pool* pool = connection_pool::get_instance();
-    MYSQL* conn = pool->get_connection();
+    PGconn* conn = pool->get_connection();
 
     if (!conn) {
         msg = std::string("DB connection failed.");
@@ -20,81 +47,71 @@ bool ResourceDAO::create_resource(const Resource& resource){
         return false;
     }
 
-    // Generate query statement
     std::string sql =
-    "INSERT INTO resources (user_id, title, content, is_file) VALUES (" +
-    std::to_string(resource.user_id) + ", '" +
-    resource.title + "', '" +
-    resource.content + "', " +
-    (resource.is_file ? "1" : "0") + ")";
+        "INSERT INTO resources (user_id, title, content, is_file) VALUES (" +
+        std::to_string(resource.user_id) + ", '" +
+        resource.title + "', '" +
+        resource.content + "', " +
+        (resource.is_file ? "TRUE" : "FALSE") + ")";
 
-    bool success = (mysql_query(conn, sql.c_str()) == 0);
-    if (!success) {
-        msg = std::string("Query failed.");
-        Logger::get_instance()->log(ERROR, "Query failed: " + sql);
-    }
+    PGresult* result = PQexec(conn, sql.c_str());
+    bool success = command_ok(conn, result, sql, msg);
 
+    PQclear(result);
     pool->release_connection(conn);
     return success;
 }
 
 // Loads all resources owned by one user.
-std::vector<Resource> ResourceDAO::get_resources(int user_id){
-     msg.clear();
+std::vector<Resource> ResourceDAO::get_resources(int user_id) {
+    msg.clear();
 
-     std::vector<Resource> res;
-     msg.clear();
-     connection_pool* pool = connection_pool::get_instance();
-     MYSQL* conn = pool->get_connection();
- 
-     if(!conn) {
+    std::vector<Resource> res;
+    connection_pool* pool = connection_pool::get_instance();
+    PGconn* conn = pool->get_connection();
+
+    if (!conn) {
         msg = std::string("DB connection failed.");
         Logger::get_instance()->log(ERROR, msg);
         return res;
-     }
+    }
 
-     std::string sql =
-         "SELECT id, title, content, is_file FROM resources WHERE user_id=" + std::to_string(user_id);
+    std::string sql =
+        "SELECT id, title, content, is_file FROM resources WHERE user_id=" +
+        std::to_string(user_id);
 
-     
-     if(mysql_query(conn, sql.c_str())){
-         msg = std::string("Query failed.");
-         Logger::get_instance()->log(ERROR, msg);
-         pool->release_connection(conn);
-         return res;
-     }
- 
-     MYSQL_RES* result = mysql_store_result(conn);
-     if (!result){
-         msg = std::string("Result not found.");
-         Logger::get_instance()->log(ERROR, msg);
-         pool->release_connection(conn);
-         return res;
-     }
-     
-     MYSQL_ROW row;
-     while ((row = mysql_fetch_row(result))) {
+    PGresult* result = PQexec(conn, sql.c_str());
+    if (PQresultStatus(result) != PGRES_TUPLES_OK) {
+        msg = std::string("Query failed: ") + PQerrorMessage(conn);
+        Logger::get_instance()->log(ERROR, msg + " SQL: " + sql);
+        PQclear(result);
+        pool->release_connection(conn);
+        return res;
+    }
+
+    int row_count = PQntuples(result);
+    for (int row = 0; row < row_count; ++row) {
         Resource r;
-        r.id = atoi(row[0]);
-        r.title = row[1] ? row[1] : "";
-        r.content = row[2] ? row[2] : "";
-        r.is_file = row[3] && atoi(row[3]) != 0;
+        r.id = std::atoi(PQgetvalue(result, row, 0));
+        r.title = nullable_value(result, row, 1);
+        r.content = nullable_value(result, row, 2);
+        r.is_file = pg_bool_value(result, row, 3);
 
         res.push_back(r);
     }
 
-     mysql_free_result(result);
-     pool->release_connection(conn);
- 
-     return res;
+    PQclear(result);
+    pool->release_connection(conn);
+
+    return res;
 }
 
 // Loads one resource by user id and resource id.
-std::optional<Resource> ResourceDAO::get_resource(int user_id, int id){
+std::optional<Resource> ResourceDAO::get_resource(int user_id, int id) {
     msg.clear();
 
     connection_pool* pool = connection_pool::get_instance();
-    MYSQL* conn = pool->get_connection();
+    PGconn* conn = pool->get_connection();
 
     if (!conn) {
         msg = std::string("DB connection failed.");
@@ -106,107 +123,96 @@ std::optional<Resource> ResourceDAO::get_resource(int user_id, int id){
         "SELECT id, title, content, is_file FROM resources WHERE user_id=" +
         std::to_string(user_id) + " AND id=" + std::to_string(id);
 
-    if (mysql_query(conn, sql.c_str())) {
-        msg = std::string("Query failed.");
-        Logger::get_instance()->log(ERROR, msg);
+    PGresult* result = PQexec(conn, sql.c_str());
+    if (PQresultStatus(result) != PGRES_TUPLES_OK) {
+        msg = std::string("Query failed: ") + PQerrorMessage(conn);
+        Logger::get_instance()->log(ERROR, msg + " SQL: " + sql);
+        PQclear(result);
         pool->release_connection(conn);
         return std::nullopt;
     }
 
-    MYSQL_RES* result = mysql_store_result(conn);
-    if (!result) {
-        msg = std::string("Result not found.");
-        Logger::get_instance()->log(ERROR, msg);
-        pool->release_connection(conn);
-        return std::nullopt;
-    }
-
-    MYSQL_ROW row = mysql_fetch_row(result);
-    if (!row) {
+    if (PQntuples(result) == 0) {
         msg = std::string("Resource not found.");
         Logger::get_instance()->log(ERROR, msg);
-        mysql_free_result(result);
+        PQclear(result);
         pool->release_connection(conn);
         return std::nullopt;
     }
 
     Resource r;
-    r.id = atoi(row[0]);
-    r.title = row[1] ? row[1] : "";
-    r.content = row[2] ? row[2] : "";
-    r.is_file = row[3] && atoi(row[3]) != 0;
+    r.id = std::atoi(PQgetvalue(result, 0, 0));
+    r.title = nullable_value(result, 0, 1);
+    r.content = nullable_value(result, 0, 2);
+    r.is_file = pg_bool_value(result, 0, 3);
 
-    mysql_free_result(result);
+    PQclear(result);
     pool->release_connection(conn);
     return r;
 }
 
 // Executes a resource UPDATE statement and reports whether a row changed.
-bool ResourceDAO::update_resource(const Resource& resource){
+bool ResourceDAO::update_resource(const Resource& resource) {
     msg.clear();
 
     connection_pool* pool = connection_pool::get_instance();
-    MYSQL* conn = pool->get_connection();
+    PGconn* conn = pool->get_connection();
 
     if (!conn) {
         msg = std::string("DB connection failed.");
-        Logger::get_instance()->log(ERROR, "DB connection failed.");
+        Logger::get_instance()->log(ERROR, msg);
         return false;
     }
 
-    std::string sql = "UPDATE resources SET title='" + 
-                        resource.title + "', content='" + 
-                        resource.content + "', is_file=" + 
-                        (resource.is_file ? "1" : "0") + 
-                        "WHERE user_id=" + std::to_string(resource.user_id) + 
-                        " AND id=" + std::to_string(resource.id);
+    std::string sql =
+        "UPDATE resources SET title='" +
+        resource.title + "', content='" +
+        resource.content + "', is_file=" +
+        (resource.is_file ? "TRUE" : "FALSE") +
+        " WHERE user_id=" + std::to_string(resource.user_id) +
+        " AND id=" + std::to_string(resource.id);
 
-    if (mysql_query(conn, sql.c_str())) {
-        msg = std::string("Query failed.");
-        Logger::get_instance()->log(ERROR, "Query failed: " + sql);
-        pool->release_connection(conn);
-        return false;
-    }
-
-    bool success = mysql_affected_rows(conn) > 0;
-    if (!success) {
+    PGresult* result = PQexec(conn, sql.c_str());
+    bool success = command_ok(conn, result, sql, msg);
+    if (success && !affected_rows(result)) {
+        success = false;
         msg = std::string("No change proceeded.");
         Logger::get_instance()->log(ERROR, msg);
-    }    
+    }
+
+    PQclear(result);
     pool->release_connection(conn);
     return success;
 }
 
 // Deletes one resource owned by the given user.
-bool ResourceDAO::delete_resource(int user_id, int id){
+bool ResourceDAO::delete_resource(int user_id, int id) {
     msg.clear();
 
     connection_pool* pool = connection_pool::get_instance();
-    MYSQL* conn = pool->get_connection();
+    PGconn* conn = pool->get_connection();
 
     if (!conn) {
         msg = std::string("DB connection failed.");
+        Logger::get_instance()->log(ERROR, msg);
         return false;
     }
+
     std::string sql =
-        "DELETE FROM resources WHERE id=" + std::to_string(id) + 
-        " And user_id=" + std::to_string(user_id);
-        
+        "DELETE FROM resources WHERE id=" + std::to_string(id) +
+        " AND user_id=" + std::to_string(user_id);
+
     Logger::get_instance()->log(DEBUG, "SQL: " + sql);
 
-    if (mysql_query(conn, sql.c_str())) {
-        msg = std::string("Query failed.");
-        Logger::get_instance()->log(ERROR, "Query failed: " + sql);
-        pool->release_connection(conn);
-        return false;
-    }
-
-    bool success = mysql_affected_rows(conn) > 0;
-    if (!success) {
+    PGresult* result = PQexec(conn, sql.c_str());
+    bool success = command_ok(conn, result, sql, msg);
+    if (success && !affected_rows(result)) {
+        success = false;
         msg = std::string("Resource not found.");
         Logger::get_instance()->log(ERROR, msg);
     }
 
+    PQclear(result);
     pool->release_connection(conn);
     return success;
 }
