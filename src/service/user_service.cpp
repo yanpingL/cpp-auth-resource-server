@@ -64,7 +64,20 @@ json_type UserService::login(const std::string& email, const std::string& passwo
     return res;
 }
 
+
 // Resolves a bearer token to the authenticated user id.
 std::optional<int> UserService::get_user_id_from_token(const std::string& token) {
     return UserDAO::get_user_id_from_token(token);
+}
+
+
+json_type UserService::logout(const std::string& token) {
+    bool result = UserDAO::delete_session(token);
+    json_type res;
+    if (!result){
+        res["error"] = "Logout failed";
+    } else {
+        res["status"] = "Logout Succed";
+    }
+    return res;
 }

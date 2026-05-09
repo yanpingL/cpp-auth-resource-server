@@ -473,6 +473,8 @@ http_conn::HTTP_CODE http_conn::handle_register(char * text){
             return BAD_REQUEST;
         }
 
+
+        
         std::set<std::string> allowed = {"id", "name", "email", "password"};
         std::string cols;
         std::string values;
@@ -500,6 +502,7 @@ http_conn::HTTP_CODE http_conn::handle_register(char * text){
         std::string sql =  std::string("INSERT INTO users ") +
                             "(" + cols + ") values (" + values + ")";
         Logger::get_instance()->log(DEBUG, "SQL: " + sql);
+        
 
         json res = UserService::create_user(sql);
         json_res = res.dump();
@@ -552,24 +555,20 @@ http_conn::HTTP_CODE http_conn::handle_login(char* text) {
 
 // Handle POST api/logout
 http_conn::HTTP_CODE http_conn::handle_logout() {
-    if (!UserDAO::validate_token(token)) {
-        json_res = "{\"error\":\"invalid token\"}";
+
+    std::optional<int> user_id = UserService::get_user_id_from_token(token);
+    if (user_id == std::nullopt){
+        json_res = "{\"error\":\"unauthorized\"}";
+        Logger::get_instance()->log(ERROR, "unauthorized");
         return FORBIDDEN_REQUEST;
     }
 
-    if (token.empty()) {
-        json_res = "{\"error\":\"no token\"}";
-        Logger::get_instance()->log(ERROR, "no token");
+    json res = UserService::logout(token);
+    json_res = res.dump();
+    if (res.contains("error")){
+        Logger::get_instance()->log(ERROR, res["error"]);
         return BAD_REQUEST;
     }
-
-    if (!UserDAO::delete_session(token)) {
-        json_res = "{\"error\":\"logout failed\"}";
-        Logger::get_instance()->log(ERROR, "logout failed.");
-        return INTERNAL_ERROR;
-    }
-
-    json_res = "{\"message\":\"logout success\"}";
     return DELETE_RESOURCE;
 }
 
