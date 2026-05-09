@@ -469,36 +469,6 @@ http_conn::HTTP_CODE http_conn::handle_register(char * text){
             return BAD_REQUEST;
         }
 
-
-        /*
-        std::set<std::string> allowed = {"id", "name", "email", "password"};
-        std::string cols;
-        std::string values;
-
-        for (auto it = j.begin(); it != j.end(); ++it){
-            std::string key = it.key();
-
-            if(!allowed.count(key)) continue;
-
-            cols += key + ",";
-            if(it.value().is_number()){
-                values += it.value().dump() + ",";
-            } else if (it.value().is_string()){
-                std::string val = it.value();
-                if (key == "password") {
-                    val = sha256(val);
-                }
-                values += "'" + val + "',";
-            }
-        }
-
-        if(!cols.empty()) cols.pop_back();
-        if(!values.empty()) values.pop_back();
-
-        std::string sql =  std::string("INSERT INTO users ") +
-                            "(" + cols + ") values (" + values + ")";
-        Logger::get_instance()->log(DEBUG, "SQL: " + sql);
-        */
         UserInfo info;
         info.name = j["name"];
         info.email = j["email"];
@@ -667,6 +637,7 @@ http_conn::HTTP_CODE http_conn::handle_post_resource(char * text){
         Logger::get_instance()->log(ERROR, "unauthorized");
         return FORBIDDEN_REQUEST;
     }
+    int user = user_id.value();
 
     std::string body(text);
     Logger::get_instance()->log(INFO, "POST /api/resource body=" + body);
@@ -682,8 +653,12 @@ http_conn::HTTP_CODE http_conn::handle_post_resource(char * text){
         return INTERNAL_ERROR;
     }
 
-    if (!j.contains("id") || !j["id"].is_number_integer()){
-        json_res = "{\"error\":\"invalid id\"}";
+    if (j.contains("title") && !j["title"].is_string()){
+        json_res = "{\"error\":\"invalid title\"}";
+        return BAD_REQUEST;
+    }
+    if (j.contains("content") && !j["content"].is_string()){
+        json_res = "{\"error\":\"invalid content\"}";
         return BAD_REQUEST;
     }
     if (j.contains("is_file") && !j["is_file"].is_boolean()){
@@ -691,6 +666,7 @@ http_conn::HTTP_CODE http_conn::handle_post_resource(char * text){
         return BAD_REQUEST;
     }
 
+    /*
     std::set<std::string> allowed = {"id", "title", "content", "is_file"};
     std::string cols;
     std::string values;
@@ -719,8 +695,15 @@ http_conn::HTTP_CODE http_conn::handle_post_resource(char * text){
     std::string sql =  std::string("INSERT INTO resources ") +
                         "(" + cols + ") values (" + values + ")";
     Logger::get_instance()->log(DEBUG, "SQL: " + sql);
+    */
+    ResourceInfo newResource;
+    newResource.user_id = user;
+    newResource.title = j.contains("title")? j["title"]: "";
+    newResource.content = j.contains("content")? j["content"]: "";
+    newResource.is_file = j.contains("is_file")? j["is_file"].get<bool>(): false ;
+    
 
-    json res = ResourceService::create_resource(sql);
+    json res = ResourceService::create_resource(newResource);
     json_res = res.dump();
     if (res.contains("error")){
         return BAD_REQUEST;
@@ -738,6 +721,7 @@ http_conn::HTTP_CODE http_conn::handle_put_resource(char* text){
         Logger::get_instance()->log(ERROR, "unauthorized");
         return FORBIDDEN_REQUEST;
     }
+    int user = user_id.value();
 
     std::string body(text);
     Logger::get_instance()->log(INFO, "PUT /api/resource body=" + body);
@@ -758,6 +742,8 @@ http_conn::HTTP_CODE http_conn::handle_put_resource(char* text){
         return BAD_REQUEST;
     }
     int id = j["id"];
+
+    /*
 
     std::string set_clause;
     std::set<std::string> allowed = {"id", "title", "content"};
@@ -786,8 +772,15 @@ http_conn::HTTP_CODE http_conn::handle_put_resource(char* text){
                         + set_clause + " WHERE user_id=" + std::to_string(user_id.value()) +
                         " AND id=" +  std::to_string(id);
     Logger::get_instance()->log(DEBUG, "SQL: " + sql);
+    */
 
-    json res = ResourceService::update_resource(sql);
+    ResourceInfo Info;
+    Info.user_id = user;
+    Info.id = j["id"];
+    Info.title = j.contains("title") ? j["title"]: "";
+    Info.content = j.contains("content")? j["content"]: "";
+
+    json res = ResourceService::update_resource(Info);
     json_res = res.dump();
 
     if (res.contains("error")){

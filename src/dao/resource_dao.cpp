@@ -8,7 +8,8 @@
 std::string ResourceDAO::msg;
 
 // Executes a resource INSERT statement.
-bool ResourceDAO::create_resource(const std::string& sql){
+bool ResourceDAO::create_resource(const Resource& resource){
+    msg.clear();
 
     connection_pool* pool = connection_pool::get_instance();
     MYSQL* conn = pool->get_connection();
@@ -18,6 +19,14 @@ bool ResourceDAO::create_resource(const std::string& sql){
         Logger::get_instance()->log(ERROR, msg);
         return false;
     }
+
+    // Generate query statement
+    std::string sql =
+    "INSERT INTO resources (user_id, title, content, is_file) VALUES (" +
+    std::to_string(resource.user_id) + ", '" +
+    resource.title + "', '" +
+    resource.content + "', " +
+    (resource.is_file ? "1" : "0") + ")";
 
     bool success = (mysql_query(conn, sql.c_str()) == 0);
     if (!success) {
@@ -31,6 +40,8 @@ bool ResourceDAO::create_resource(const std::string& sql){
 
 // Loads all resources owned by one user.
 std::vector<Resource> ResourceDAO::get_resources(int user_id){
+     msg.clear();
+
      std::vector<Resource> res;
      msg.clear();
      connection_pool* pool = connection_pool::get_instance();
@@ -81,6 +92,7 @@ std::vector<Resource> ResourceDAO::get_resources(int user_id){
 // Loads one resource by user id and resource id.
 std::optional<Resource> ResourceDAO::get_resource(int user_id, int id){
     msg.clear();
+
     connection_pool* pool = connection_pool::get_instance();
     MYSQL* conn = pool->get_connection();
 
@@ -130,7 +142,9 @@ std::optional<Resource> ResourceDAO::get_resource(int user_id, int id){
 }
 
 // Executes a resource UPDATE statement and reports whether a row changed.
-bool ResourceDAO::update_resource(const std::string& sql){
+bool ResourceDAO::update_resource(const Resource& resource){
+    msg.clear();
+
     connection_pool* pool = connection_pool::get_instance();
     MYSQL* conn = pool->get_connection();
 
@@ -139,6 +153,13 @@ bool ResourceDAO::update_resource(const std::string& sql){
         Logger::get_instance()->log(ERROR, "DB connection failed.");
         return false;
     }
+
+    std::string sql = "UPDATE resources SET title='" + 
+                        resource.title + "', content='" + 
+                        resource.content + "', is_file=" + 
+                        (resource.is_file ? "1" : "0") + 
+                        "WHERE user_id=" + std::to_string(resource.user_id) + 
+                        " AND id=" + std::to_string(resource.id);
 
     if (mysql_query(conn, sql.c_str())) {
         msg = std::string("Query failed.");
@@ -158,6 +179,8 @@ bool ResourceDAO::update_resource(const std::string& sql){
 
 // Deletes one resource owned by the given user.
 bool ResourceDAO::delete_resource(int user_id, int id){
+    msg.clear();
+
     connection_pool* pool = connection_pool::get_instance();
     MYSQL* conn = pool->get_connection();
 

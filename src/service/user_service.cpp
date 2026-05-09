@@ -33,20 +33,22 @@ json_type UserService::login(const UserInfo& Info) {
     json_type res;
 
     if (!user_opt.has_value()) {
-        res["error"] = "User not found";
+        res["error"] = UserDAO::msg;
         return res;
     }
 
     const auto& user = user_opt.value();
     // Compare password hash value
     if (user.password != sha256(Info.password)) {
-        res["error"] = "wrong password";
+        UserDAO::msg = "wrong password";
+        res["error"] = UserDAO::msg;
         return res;
     }
     // Generate Token
     std::string token = generate_token();
     if (token.empty()) {
-        res["error"] = "token generation failed";
+        UserDAO::msg = "token generation failed";
+        res["error"] = UserDAO::msg;
         return res;
     }
     // Create user session
@@ -72,7 +74,7 @@ json_type UserService::logout(const std::string& token) {
     bool result = UserDAO::delete_session(token);
     json_type res;
     if (!result){
-        res["error"] = "Logout failed";
+        res["error"] = UserDAO::msg;
     } else {
         res["status"] = "Logout Succed";
     }
