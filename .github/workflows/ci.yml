@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Build Docker environment
+        run: docker compose build web1 web2
+
+      - name: Start build containers
+        run: docker compose up -d web1 web2
+
+      - name: Configure CMake in web1
+        run: docker exec sys-web-1 bash -lc "cd /workspace && cmake -S . -B build"
+
+      - name: Configure CMake in web2
+        run: docker exec sys-web-2 bash -lc "cd /workspace && cmake -S . -B build"
+
+      - name: Build C++ targets in web1
+        run: docker exec sys-web-1 bash -lc "cd /workspace && cmake --build build --parallel 2"
+
+      - name: Build C++ targets in web2
+        run: docker exec sys-web-2 bash -lc "cd /workspace && cmake --build build --parallel 2"
+
+      - name: Run C++ unit tests in web1
+        run: docker exec sys-web-1 bash -lc "cd /workspace && ctest --test-dir build --output-on-failure"
+
+      - name: Stop Docker environment
+        if: always()
+        run: docker compose down -v
