@@ -175,6 +175,8 @@ bool http_conn::write(){
         }
     }
 }
+
+
 // Close connection
 void http_conn::close_conn(){
     if(m_sockfd != -1){
@@ -418,7 +420,6 @@ http_conn::HTTP_CODE http_conn::parse_headers(char * text){
 // Parse request body
 // Didn't really parse the HTTP request body, only check if it's fully read
 // Then route it to the corresponding business logic
-
 http_conn::HTTP_CODE http_conn::parse_content(char * text){
     if (m_read_index >= (m_content_length + m_checked_index ) ) {
         text[ m_content_length ] = '\0';
@@ -666,36 +667,7 @@ http_conn::HTTP_CODE http_conn::handle_post_resource(char * text){
         return BAD_REQUEST;
     }
 
-    /*
-    std::set<std::string> allowed = {"id", "title", "content", "is_file"};
-    std::string cols;
-    std::string values;
-    cols += "user_id,";
-    values += std::to_string(user_id.value()) + ",";
-
-    for (auto it = j.begin(); it != j.end(); ++it){
-        std::string key = it.key();
-
-        if(!allowed.count(key)) continue;
-
-        cols += key + ",";
-
-        if (key == "is_file"){
-            values += it.value().get<bool>() ? "1," : "0,";
-        } else if(it.value().is_number()){
-            values += it.value().dump() + ",";
-        } else if (it.value().is_string()){
-            std::string val = it.value();
-            values += "'" + val + "',";
-        }
-    }
-    if(!cols.empty()) cols.pop_back();
-    if(!values.empty()) values.pop_back();
-
-    std::string sql =  std::string("INSERT INTO resources ") +
-                        "(" + cols + ") values (" + values + ")";
-    Logger::get_instance()->log(DEBUG, "SQL: " + sql);
-    */
+    
     ResourceInfo newResource;
     newResource.user_id = user;
     newResource.title = j.contains("title")? j["title"]: "";
@@ -742,37 +714,6 @@ http_conn::HTTP_CODE http_conn::handle_put_resource(char* text){
         return BAD_REQUEST;
     }
     int id = j["id"];
-
-    /*
-
-    std::string set_clause;
-    std::set<std::string> allowed = {"id", "title", "content"};
-
-    for (auto it = j.begin(); it != j.end(); ++it){
-        std::string key = it.key();
-
-        if(key == "id" || !allowed.count(key)) continue;
-
-        if (it.value().is_number()){
-            set_clause += key + "=" + it.value().dump() + ",";
-        } else if (it.value().is_string()){
-            std::string val = it.value();
-            set_clause += key + "='" + val + "',";
-        }
-    }
-
-    if(set_clause.empty()){
-        json_res = "{\"error\":\"no fields to update\"}";
-        return BAD_REQUEST;
-    }
-
-    set_clause.pop_back();
-
-    std::string sql = std::string("UPDATE resources SET ")
-                        + set_clause + " WHERE user_id=" + std::to_string(user_id.value()) +
-                        " AND id=" +  std::to_string(id);
-    Logger::get_instance()->log(DEBUG, "SQL: " + sql);
-    */
 
     ResourceInfo Info;
     Info.user_id = user;
