@@ -22,7 +22,6 @@
 #include <iostream>
 #include <string>
 #include <nlohmann/json.hpp>
-#include <mysql/mysql.h>
 #include <set>
 #include "thread/locker.h"
 

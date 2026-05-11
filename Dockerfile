@@ -26,7 +26,7 @@ RUN apt-get update -o Acquire::Retries=5 && \
       manpages \
       manpages-dev \
 	      nlohmann-json3-dev \
-	      libmysqlclient-dev \
+	      libpq-dev \
 	      libhiredis-dev \
 	      libcurl4-openssl-dev \
 	      libssl-dev \

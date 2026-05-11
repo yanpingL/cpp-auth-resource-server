@@ -8,22 +8,22 @@ connection_pool::connection_pool(){
     free_conn = 0;
 }
 
-// Closes all MySQL connections still owned by the pool.
+// Closes all PostgreSQL connections still owned by the pool.
 connection_pool::~connection_pool() {
     while (!conn_list.empty()) {
-        MYSQL* conn = conn_list.front();
+        PGconn* conn = conn_list.front();
         conn_list.pop();
-        mysql_close(conn);
+        PQfinish(conn);
     }
 }
 
-// Returns the shared MySQL connection pool instance.
+// Returns the shared PostgreSQL connection pool instance.
 connection_pool* connection_pool::get_instance() {
     static connection_pool instance;
     return &instance;
 }
 
-// Opens the configured number of MySQL connections.
+// Opens the configured number of PostgreSQL connections.
 void connection_pool::init(std::string url, std::string user,
     std::string password, std::string db_name,
     int port, int max_conn) {
@@ -36,26 +36,22 @@ void connection_pool::init(std::string url, std::string user,
     this->max_conn = max_conn;
 
     for (int i = 0; i < max_conn; i++) {
-        MYSQL* conn = mysql_init(NULL);
+        std::string conninfo =
+            "host=" + url +
+            " port=" + std::to_string(port) +
+            " dbname=" + db_name +
+            " user=" + user +
+            " password=" + password;
 
-        if (!conn) {
-            std::cout << "MySQL init error\n";
-            Logger::get_instance()->log(ERROR, "MySQL connect error");
-            exit(1);
-        }
+        PGconn* conn = PQconnectdb(conninfo.c_str());
 
-        conn = mysql_real_connect(conn,
-           url.c_str(),
-           user.c_str(),
-           password.c_str(),
-           db_name.c_str(),
-           port,
-           NULL,
-           0);
-
-        if (!conn) {
-            std::cout << "MySQL connect error\n";
-            Logger::get_instance()->log(ERROR, "MySQL connect error");
+        if (PQstatus(conn) != CONNECTION_OK) {
+            std::string error = conn ? PQerrorMessage(conn) : "PQconnectdb returned null";
+            std::cout << "PostgreSQL connect error: " << error << "\n";
+            Logger::get_instance()->log(ERROR, "PostgreSQL connect error: " + error);
+            if (conn) {
+                PQfinish(conn);
+            }
             exit(1);
         }
 
@@ -69,8 +65,8 @@ void connection_pool::init(std::string url, std::string user,
 }
 
 // Blocks until a connection is available, then leases it to the caller.
-MYSQL* connection_pool::get_connection() {
-    MYSQL* conn = NULL;
+PGconn* connection_pool::get_connection() {
+    PGconn* conn = NULL;
 
     reserve.wait();
     lock.lock();
@@ -90,7 +86,7 @@ MYSQL* connection_pool::get_connection() {
 }
 
 // Returns a leased connection back to the pool.
-bool connection_pool::release_connection(MYSQL* conn) {
+bool connection_pool::release_connection(PGconn* conn) {
     if (!conn) return false;
 
     lock.lock();
@@ -104,7 +100,7 @@ bool connection_pool::release_connection(MYSQL* conn) {
     return true;
 }
 
-// Reports the number of currently idle MySQL connections.
+// Reports the number of currently idle PostgreSQL connections.
 int connection_pool::get_free_conn() {
     return free_conn;
 }

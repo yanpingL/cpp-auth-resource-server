@@ -1,7 +1,7 @@
 #ifndef CONNECTION_POOL_H
 #define CONNECTION_POOL_H
 
-#include <mysql/mysql.h>
+#include <libpq-fe.h>
 #include <queue>
 #include <string>
 #include "thread/locker.h"
@@ -14,8 +14,8 @@ public:
     void init(std::string url, std::string user, std::string password,
               std::string db_name, int port, int max_conn);
 
-    MYSQL* get_connection();
-    bool release_connection(MYSQL* conn);
+    PGconn* get_connection();
+    bool release_connection(PGconn* conn);
     int get_free_conn();
 
 private:
@@ -30,7 +30,7 @@ private:
     locker lock;
     sem reserve;
 
-    std::queue<MYSQL*> conn_list;
+    std::queue<PGconn*> conn_list;
 
     std::string url;
     std::string user;

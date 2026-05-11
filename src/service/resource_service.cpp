@@ -4,9 +4,14 @@
 #include "service/storage_service.h"
 
 // Creates a resource and returns a JSON status object.
-res_json ResourceService::create_resource(const std::string& sql){
+res_json ResourceService::create_resource(const ResourceInfo& Info){
+     Resource resource;
+     resource.user_id = Info.user_id;
+     resource.title = Info.title;
+     resource.content = Info.content;
+     resource.is_file = Info.is_file;
 
-     bool ok = ResourceDAO::create_resource(sql);
+     bool ok = ResourceDAO::create_resource(resource);
      res_json res;
 
      if (!ok){
@@ -80,9 +85,14 @@ res_json ResourceService::get_file_download_url(int user_id, int id){
 }
 
 // Updates a resource and returns a JSON status object.
-res_json ResourceService::update_resource(const std::string& sql){
-     bool ok = ResourceDAO::update_resource(sql);
+res_json ResourceService::update_resource(const ResourceInfo& Info){
+     Resource resource;
+     resource.id = Info.id;
+     resource.user_id = Info.user_id;
+     resource.title = Info.title;
+     resource.content = Info.content;
 
+     bool ok = ResourceDAO::update_resource(resource);
      res_json res;
      if (!ok){
           res["error"] = ResourceDAO::msg;

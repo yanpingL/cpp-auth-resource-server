@@ -6,13 +6,23 @@
 #include <optional>
 #include <string>
 
+struct UserInfo{
+    int id;
+    std::string name;
+    std::string email;
+    std::string password;
+};
+
+
+
 using json_type = nlohmann::ordered_json;
 
 class UserService{
 public:
-    static json_type create_user(const std::string& sql);
-    static json_type login(const std::string& email, const std::string& password);
+    static json_type create_user(const UserInfo& Info);
+    static json_type login(const UserInfo& Info);
     static std::optional<int> get_user_id_from_token(const std::string& token);
+    static json_type logout(const std::string& token);
 };
 
 #endif

@@ -1,6 +1,6 @@
 # C++ Auth Resource Server
 
-A Scalable C++17 HTTP web server with user authentication, resource management, Redis-backed sessions, MySQL persistence, Nginx load balancing, and MinIO file storage.
+A Scalable C++17 HTTP web server with user authentication, resource management, Redis-backed sessions, PostgreSQL persistence, Nginx load balancing, and MinIO file storage.
 
 ## What It Does
 
@@ -12,7 +12,7 @@ At the application level, it supports:
 - User login and logout.
 - Token-based API authentication.
 - Resource CRUD operations.
-- Text resources stored directly in MySQL.
+- Text resources stored directly in PostgreSQL.
 - File resources stored in MinIO, with the resource table storing the file URL.
 - Presigned MinIO upload URLs so clients can upload files directly to storage.
 - Presigned MinIO download URLs so clients can download files directly from storage.
@@ -36,13 +36,13 @@ client -> MinIO: download file bytes
 
 ## Project Highlights
 
-**Tech Stack:** C++, Linux `epoll`, multithreading, RESTful API, MySQL, Redis, Docker, Nginx, Git.
+**Tech Stack:** C++, Linux `epoll`, multithreading, RESTful API, PostgreSQL, Redis, Docker, Nginx, Git.
 
 - Built a high-performance multi-user backend system supporting authenticated CRUD operations and file upload/download through RESTful APIs.
 - Implemented an event-driven HTTP server using `epoll`-based Reactor non-blocking I/O and a custom thread pool, avoiding thread-per-connection overhead.
 - Designed a layered `Network -> Service -> DAO` architecture to separate HTTP handling, business logic, and database access.
-- Developed a thread-safe MySQL connection pool with semaphore-based control to reduce connection contention under concurrent workloads.
-- Implemented token-based authentication with Redis TTL caching and MySQL persistent session storage, following a cache-aside validation pattern.
+- Developed a thread-safe PostgreSQL connection pool with semaphore-based control to reduce connection contention under concurrent workloads.
+- Implemented token-based authentication with Redis TTL caching and PostgreSQL persistent session storage, following a cache-aside validation pattern.
 - Deployed multiple C++ server instances behind Nginx load balancing and containerized the full system with Docker Compose.
 - Benchmarked approximately **4.9k requests/sec** under **1,000 concurrent connections** through Nginx load balancing, with **p90 latency around 221 ms**, **p99 latency around 247 ms**, and **0 errors** during the test.
 
@@ -95,9 +95,9 @@ Shared backend services used by both webservers:
 
   Redis
     - Fast token/session lookup cache.
-    - Avoids hitting MySQL for every authenticated request.
+    - Avoids hitting PostgreSQL for every authenticated request.
 
-  MySQL
+  PostgreSQL
     - Persistent users, sessions, and resource metadata.
     - Accessed through DAO classes and the connection pool.
 
@@ -132,11 +132,11 @@ Service layer
   - Handles login, resource CRUD, file URL creation, and file cleanup.
 
 DAO layer
-  - Converts service requests into MySQL operations.
+  - Converts service requests into PostgreSQL operations.
   - Reads and writes users, sessions, and resources.
 
 Database/cache/storage adapters
-  - Connection pool manages MySQL connections.
+  - Connection pool manages PostgreSQL connections.
   - Redis client caches token-to-user mappings.
   - Storage service signs MinIO presigned URLs.
 ```
@@ -149,9 +149,9 @@ Client request
   -> one C++ webserver
   -> epoll/main thread receives socket event
   -> thread pool processes http_conn
-  -> UserService validates token through Redis/MySQL
+  -> UserService validates token through Redis/PostgreSQL
   -> ResourceService handles business logic
-  -> ResourceDAO uses MySQL connection pool
+  -> ResourceDAO uses PostgreSQL connection pool
   -> http_conn builds JSON response
   -> socket write sends response back through Nginx
 ```
@@ -166,42 +166,44 @@ client -> backend creates resource row with public_url
 
 Download:
 client -> backend asks by resource_id
-backend -> MySQL finds file resource
+backend -> PostgreSQL finds file resource
 backend -> MinIO presigned GET URL
 client -> MinIO downloads bytes directly
 ```
 
 The project uses three main storage systems:
 
-- **MySQL** is the persistent database. It stores users, sessions, and resource metadata.
-- **Redis** is the cache/session acceleration layer. It stores token-to-user mappings so authenticated requests can avoid hitting MySQL every time.
-- **MinIO** is the object storage layer. It stores uploaded file bytes, while MySQL stores the related resource metadata and public file URL.
+- **PostgreSQL** is the persistent database. It stores users, sessions, and resource metadata.
+- **Redis** is the cache/session acceleration layer. It stores token-to-user mappings so authenticated requests can avoid hitting PostgreSQL every time.
+- **MinIO** is the object storage layer. It stores uploaded file bytes, while PostgreSQL stores the related resource metadata and public file URL.
 
-Main MySQL tables:
+Main PostgreSQL tables:
 
 ```sql
 users (
-    id INT PRIMARY KEY,
+    id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     email VARCHAR(255) NOT NULL UNIQUE,
     password VARCHAR(255) NOT NULL
 )
 
 sessions (
-    id INT AUTO_INCREMENT PRIMARY KEY,
+    id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     user_id INT NOT NULL,
     token VARCHAR(255) NOT NULL UNIQUE,
-    expires_at DATETIME NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    expires_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 )
 
 resources (
-    id INT PRIMARY KEY,
+    id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     user_id INT NOT NULL,
     title VARCHAR(255),
     content TEXT,
     is_file BOOLEAN DEFAULT FALSE,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 )
 ```
 
@@ -254,7 +256,7 @@ Files:
 - `src/dao/user_dao.cpp`
 - `src/dao/resource_dao.cpp`
 
-This layer talks to MySQL:
+This layer talks to PostgreSQL:
 
 - `UserDAO`: user lookup, session insert/delete, token validation, Redis token cache fallback.
 - `ResourceDAO`: create, list, get, update, and delete resources.
@@ -266,10 +268,10 @@ Files:
 - `src/db/connection_pool.cpp`
 - `src/db/connection_pool.h`
 
-This layer manages a pool of MySQL connections. The server initializes it in `src/main.cpp` with:
+This layer manages a pool of PostgreSQL connections. The server initializes it in `src/main.cpp` with:
 
 ```cpp
-connPool->init("sys-mysql", "webuser", "webpass123", "webdb", 3306, 10);
+connPool->init("postgres", "webuser", "webpass123", "webdb", 5432, 10);
 ```
 
 ### Cache Layer
@@ -279,7 +281,7 @@ Files:
 - `src/cache/redis_client.cpp`
 - `src/cache/redis_client.h`
 
-Redis stores session token lookups so normal authenticated requests do not always need to hit MySQL.
+Redis stores session token lookups so normal authenticated requests do not always need to hit PostgreSQL.
 
 ### Storage Layer
 
@@ -346,7 +348,7 @@ Logic:
 - Looks up user by email.
 - Verifies password.
 - Creates a session token.
-- Stores session in MySQL.
+- Stores session in PostgreSQL.
 - Caches token in Redis.
 - Returns `token` and `user_id`.
 
@@ -364,7 +366,7 @@ Logic:
 
 - Validates token.
 - Deletes token from Redis.
-- Deletes session row from MySQL.
+- Deletes session row from PostgreSQL.
 
 ### `GET /api/resources`
 
@@ -380,7 +382,7 @@ Logic:
 
 - Validates token.
 - Finds user ID.
-- Loads resources for that user from MySQL.
+- Loads resources for that user from PostgreSQL.
 - Returns JSON array including `id`, `title`, `content`, and `is_file`.
 
 ### `GET /api/resources?id=X`
@@ -402,7 +404,6 @@ Text resource body:
 
 ```json
 {
-  "id": 1001,
   "title": "Note",
   "content": "hello",
   "is_file": false
@@ -413,7 +414,6 @@ File resource body:
 
 ```json
 {
-  "id": 1002,
   "title": "Uploaded file",
   "content": "http://localhost:9000/webserver-files/users/1/uploads/file.txt",
   "is_file": true
@@ -423,8 +423,8 @@ File resource body:
 Logic:
 
 - Validates token.
-- Reads `id`, `title`, `content`, and optional `is_file`.
-- Stores the row in MySQL.
+- Reads `title`, `content`, and optional `is_file`.
+- Stores the row in PostgreSQL.
 - If `is_file=true`, `content` should be the MinIO public URL.
 
 ### `PUT /api/resources`
@@ -498,17 +498,18 @@ The Docker Compose environment runs:
 - `sys-nginx`: reverse proxy and load balancer, exposed at `localhost:8080`.
 - `sys-web-1`: first C++ server container, exposed directly at `localhost:8081`.
 - `sys-web-2`: second C++ server container, exposed directly at `localhost:8082`.
-- `sys-mysql`: MySQL 8.0, exposed at `localhost:3306`.
+- `sys-postgres`: PostgreSQL 16, exposed at `localhost:5432`.
 - `sys-redis`: Redis 7, exposed at `localhost:6379`.
 - `sys-minio`: MinIO object storage, API at `localhost:9000`, console at `localhost:9001`.
 
 Important configured values:
 
 ```yaml
-MYSQL_DATABASE: webdb
-MYSQL_USER: webuser
-MYSQL_PASSWORD: webpass123
-MYSQL_ROOT_PASSWORD: root123
+POSTGRES_DB: webdb
+POSTGRES_USER: webuser
+POSTGRES_PASSWORD: webpass123
+POSTGRES_HOST: postgres
+POSTGRES_PORT: 5432
 
 MINIO_ENDPOINT: http://minio:9000
 MINIO_PUBLIC_ENDPOINT: http://localhost:9000
@@ -591,38 +592,48 @@ This goes through Nginx and load-balances between `web1` and `web2`.
 
 ## Database Setup
 
-The application expects MySQL tables for users, sessions, and resources. If your database is empty, create tables like this:
+The application expects PostgreSQL tables for users, sessions, and resources. If your database is empty, create tables like this:
 
 ```bash
-# enter the mysql container
-docker exec -it sys-mysql mysql -uroot -proot123 webdb
+# enter the PostgreSQL container
+docker exec -it sys-postgres psql -U webuser -d webdb
 ```
 
 Then run:
 
 ```sql
 CREATE TABLE users (
-    id INT PRIMARY KEY,
+    id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     email VARCHAR(255) NOT NULL UNIQUE,
     password VARCHAR(255) NOT NULL
 );
 
 CREATE TABLE sessions (
-    id INT AUTO_INCREMENT PRIMARY KEY,
+    id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     user_id INT NOT NULL,
     token VARCHAR(255) NOT NULL UNIQUE,
-    expires_at DATETIME NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    expires_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_sessions_user
+        FOREIGN KEY (user_id)
+        REFERENCES users(id)
+        ON DELETE CASCADE
 );
 
 CREATE TABLE resources (
-    id INT PRIMARY KEY,
+    id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     user_id INT NOT NULL,
     title VARCHAR(255),
     content TEXT,
     is_file BOOLEAN DEFAULT FALSE,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_resources_user
+        FOREIGN KEY (user_id)
+        REFERENCES users(id)
+        ON DELETE CASCADE
 );
 ```
 
@@ -931,7 +942,7 @@ Response:
 All tests should pass.
 ```
 
-The API tests expect the Docker services, both webserver processes, MySQL data, Redis, and MinIO bucket to be available.
+The API tests expect the Docker services, both webserver processes, PostgreSQL data, Redis, and MinIO bucket to be available.
 
 ## Notes
 

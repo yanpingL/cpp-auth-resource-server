@@ -3,89 +3,55 @@
 #include "utils/logger.h"
 #include "cache/redis_client.h"
 
-#include <mysql/mysql.h>
+#include <cstdlib>
 #include <iostream>
 
 std::string UserDAO::msg;
 
+namespace {
 
-// Executes an INSERT-style user/session SQL statement.
-bool UserDAO::create_user(const std::string& sql) {
+bool command_ok(PGconn* conn, PGresult* result, const std::string& sql, std::string& msg) {
+    bool success = PQresultStatus(result) == PGRES_COMMAND_OK;
+    if (!success) {
+        msg = std::string("Query failed: ") + PQerrorMessage(conn);
+        Logger::get_instance()->log(ERROR, msg + " SQL: " + sql);
+    }
+    return success;
+}
+
+} // namespace
+
+// Creates a user record.
+bool UserDAO::create_user(const User& user) {
     connection_pool* pool = connection_pool::get_instance();
-    MYSQL* conn = pool->get_connection();
+    PGconn* conn = pool->get_connection();
 
     if (!conn) {
         msg = std::string("DB connection failed.");
         Logger::get_instance()->log(ERROR, msg);
         return false;
     }
-    bool success = (mysql_query(conn, sql.c_str()) == 0);
-    if (!success) {
-        msg = std::string("Query failed: ") + mysql_error(conn);
-        Logger::get_instance()->log(ERROR, msg + " SQL: " + sql);
-    }
 
+    std::string sql =
+        "INSERT INTO users (name, email, password) VALUES ('" +
+        user.name + "', '" +
+        user.email + "', '" +
+        user.password + "')";
+
+    PGresult* result = PQexec(conn, sql.c_str());
+    bool success = command_ok(conn, result, sql, msg);
+
+    PQclear(result);
     pool->release_connection(conn);
     return success;
 }
 
-
-
-// Loads one user by numeric id.
-std::optional<User> UserDAO::get_user_by_id(int id){
-    connection_pool* pool = connection_pool::get_instance();
-    MYSQL* conn = pool->get_connection();
-
-    if(!conn) return std::nullopt;
-
-    std::string sql = 
-        "SELECT id, name, email FROM users WHERE id=" + std::to_string(id);
-    Logger::get_instance()->log(DEBUG, "SQL: " + sql);
-    
-    if(mysql_query(conn, sql.c_str())){
-        msg = std::string("Query failed.");
-        Logger::get_instance()->log(ERROR, msg);
-        pool->release_connection(conn);
-        return std::nullopt;
-    }
-
-    MYSQL_RES* result = mysql_store_result(conn);
-    if (!result){
-        msg = std::string("Query failed.");
-        Logger::get_instance()->log(ERROR, msg);
-        pool->release_connection(conn);
-        return std::nullopt;
-    }
-
-    MYSQL_ROW row = mysql_fetch_row(result);
-    if (!row){
-        msg = std::string("result not found.");
-        Logger::get_instance()->log(ERROR, msg);
-        mysql_free_result(result);
-        pool->release_connection(conn);
-        return std::nullopt;
-    }
-
-    User user;
-    user.id = atoi(row[0]);
-    user.name = row[1];
-    user.email = row[2];
-
-    mysql_free_result(result);
-    pool->release_connection(conn);
-
-    return user;
-} 
-
-
-
 // Loads one user by email for login.
-std::optional<User> UserDAO::get_user_by_email(const std::string& email){
-
+std::optional<User> UserDAO::get_user_by_email(const std::string& email) {
     connection_pool* pool = connection_pool::get_instance();
-    MYSQL* conn = pool->get_connection();
+    PGconn* conn = pool->get_connection();
 
-    if(!conn) {
+    if (!conn) {
         msg = std::string("DB connection failed.");
         Logger::get_instance()->log(ERROR, msg);
         return std::nullopt;
@@ -96,167 +62,77 @@ std::optional<User> UserDAO::get_user_by_email(const std::string& email){
 
     Logger::get_instance()->log(DEBUG, "SQL: " + sql);
 
-    if(mysql_query(conn, sql.c_str())){
-        msg = "Query failed";
-        Logger::get_instance()->log(ERROR, msg);
+    PGresult* result = PQexec(conn, sql.c_str());
+    if (PQresultStatus(result) != PGRES_TUPLES_OK) {
+        msg = std::string("Query failed: ") + PQerrorMessage(conn);
+        Logger::get_instance()->log(ERROR, msg + " SQL: " + sql);
+        PQclear(result);
         pool->release_connection(conn);
         return std::nullopt;
     }
 
-    MYSQL_RES* result = mysql_store_result(conn);
-    if (!result){
+    if (PQntuples(result) == 0) {
         msg = "User not found";
         Logger::get_instance()->log(ERROR, msg);
-
-        pool->release_connection(conn);
-        return std::nullopt;
-    }
-
-    MYSQL_ROW row = mysql_fetch_row(result);
-    if (!row){
-        msg = "User not found";
-        Logger::get_instance()->log(ERROR, msg);
-
-        mysql_free_result(result);
+        PQclear(result);
         pool->release_connection(conn);
         return std::nullopt;
     }
 
     User user;
-    user.id = atoi(row[0]);
-    user.name = row[1];
-    user.email = row[2];
-    user.password = row[3];
+    user.id = std::atoi(PQgetvalue(result, 0, 0));
+    user.name = PQgetvalue(result, 0, 1);
+    user.email = PQgetvalue(result, 0, 2);
+    user.password = PQgetvalue(result, 0, 3);
 
-    mysql_free_result(result);
+    PQclear(result);
     pool->release_connection(conn);
 
     return user;
 }
 
+// Creates a login session in Redis and PostgreSQL.
+bool UserDAO::create_session(int user_id, const std::string& token, int ttl_seconds) {
+    RedisClient::get_instance()->set(
+        token,
+        std::to_string(user_id),
+        ttl_seconds
+    );
 
-
-// Executes a user UPDATE statement and reports whether a row changed.
-bool UserDAO::update_user(const std::string& sql) {
     connection_pool* pool = connection_pool::get_instance();
-    MYSQL* conn = pool->get_connection();
+    PGconn* conn = pool->get_connection();
 
     if (!conn) {
         msg = std::string("DB connection failed.");
-        Logger::get_instance()->log(ERROR, "DB connection failed.");
-        return false;
-    }
-
-    if (mysql_query(conn, sql.c_str())) {
-        msg = std::string("Query failed.");
-        Logger::get_instance()->log(ERROR, "Query failed: " + sql);
-        pool->release_connection(conn);
-        return false;
-    }
-
-    bool success = mysql_affected_rows(conn) > 0;
-    if (!success) {
-        msg = std::string("Resource not found.");
         Logger::get_instance()->log(ERROR, msg);
-    }    
-    pool->release_connection(conn);
-    return success;
-}
-
-
-
-// Deletes a user by id.
-bool UserDAO::delete_user(int id) {
-    connection_pool* pool = connection_pool::get_instance();
-    MYSQL* conn = pool->get_connection();
-
-    if (!conn) {
-        msg = std::string("DB connection failed.");
+        RedisClient::get_instance()->del(token);
         return false;
     }
+
     std::string sql =
-        "DELETE FROM users WHERE id=" + std::to_string(id);
+        "INSERT INTO sessions (user_id, token, expires_at) VALUES (" +
+        std::to_string(user_id) + ", '" + token + "', NOW() + INTERVAL '" +
+        std::to_string(ttl_seconds) + " seconds')";
+
     Logger::get_instance()->log(DEBUG, "SQL: " + sql);
 
-    if (mysql_query(conn, sql.c_str())) {
-        msg = std::string("Query failed.");
-        Logger::get_instance()->log(ERROR, "Query failed: " + sql);
-        pool->release_connection(conn);
-        return false;
-    }
-
-    bool success = mysql_affected_rows(conn) > 0;
+    PGresult* result = PQexec(conn, sql.c_str());
+    bool success = command_ok(conn, result, sql, msg);
     if (!success) {
-        msg = std::string("Resource not found.");
-        Logger::get_instance()->log(ERROR, msg);
-
+        RedisClient::get_instance()->del(token);
     }
 
+    PQclear(result);
     pool->release_connection(conn);
     return success;
 }
 
-
-// Validates a session token through Redis first, then MySQL.
-bool UserDAO::validate_token(const std::string& token) {
-    std::string user_id =
-        RedisClient::get_instance()->get(token);
-
-    if (!user_id.empty()){
-        return true;
-    }
-
-    // Redis miss -> fallback to DB
-    connection_pool* pool = connection_pool::get_instance();
-    MYSQL* conn = pool->get_connection();
-
-    if (!conn) {
-        msg = std::string("DB connection failed.");
-        Logger::get_instance()->log(ERROR, msg);
-        return false;
-    }
-
-    std::string sql = "SELECT user_id FROM sessions WHERE token='" + token 
-                        + "' AND expires_at > NOW()";
-
-    Logger::get_instance()->log(DEBUG, "SQL: " + sql);
-
-    if (mysql_query(conn, sql.c_str())) {
-        msg = "Query failed";
-        Logger::get_instance()->log(ERROR, msg);
-        pool->release_connection(conn);
-        return false;
-    }
-
-    MYSQL_RES* result = mysql_store_result(conn);
-    if (!result) {
-        msg = "User not found";
-        Logger::get_instance()->log(ERROR, msg);
-        pool->release_connection(conn);
-        return false;
-    }
-
-    MYSQL_ROW row = mysql_fetch_row(result);
-
-    if (row != nullptr){
-        std::string uid = row[0];
-        RedisClient::get_instance()->set(token, uid, 3600);
-    }
-
-    mysql_free_result(result);
-    pool->release_connection(conn);
-
-    return row != nullptr;
-}
-
-
-
-// Removes a session token from Redis and MySQL.
+// Removes a session token from Redis and PostgreSQL.
 bool UserDAO::delete_session(const std::string& token) {
     RedisClient::get_instance()->del(token);
 
     connection_pool* pool = connection_pool::get_instance();
-    MYSQL* conn = pool->get_connection();
+    PGconn* conn = pool->get_connection();
 
     if (!conn) {
         msg = std::string("DB connection failed.");
@@ -267,53 +143,56 @@ bool UserDAO::delete_session(const std::string& token) {
     std::string sql =
         "DELETE FROM sessions WHERE token='" + token + "'";
 
-    bool success = (mysql_query(conn, sql.c_str()) == 0);
+    PGresult* result = PQexec(conn, sql.c_str());
+    bool success = command_ok(conn, result, sql, msg);
 
+    PQclear(result);
     pool->release_connection(conn);
     return success;
 }
 
-
-
 // Resolves a valid session token to the owning user id.
 std::optional<int> UserDAO::get_user_id_from_token(const std::string& token) {
-
     std::string uid = RedisClient::get_instance()->get(token);
     if (!uid.empty()) {
         return std::stoi(uid);
     }
 
-    // data miss in Redis, fallback to DB
     connection_pool* pool = connection_pool::get_instance();
-    MYSQL* conn = pool->get_connection();
+    PGconn* conn = pool->get_connection();
+
+    if (!conn) {
+        msg = std::string("DB connection failed.");
+        Logger::get_instance()->log(ERROR, msg);
+        return std::nullopt;
+    }
 
     std::string sql =
         "SELECT user_id FROM sessions WHERE token='" + token +
         "' AND expires_at > NOW()";
 
-    if (mysql_query(conn, sql.c_str())) {
-        msg = "Query failed";
-        Logger::get_instance()->log(ERROR, msg);
+    PGresult* result = PQexec(conn, sql.c_str());
+    if (PQresultStatus(result) != PGRES_TUPLES_OK) {
+        msg = std::string("Query failed: ") + PQerrorMessage(conn);
+        Logger::get_instance()->log(ERROR, msg + " SQL: " + sql);
+        PQclear(result);
         pool->release_connection(conn);
         return std::nullopt;
     }
 
-    MYSQL_RES* result = mysql_store_result(conn);
-    MYSQL_ROW row = mysql_fetch_row(result);
-
-    if (!row) {
+    if (PQntuples(result) == 0) {
         msg = "User not found";
         Logger::get_instance()->log(ERROR, msg);
-        mysql_free_result(result);
+        PQclear(result);
         pool->release_connection(conn);
         return std::nullopt;
     }
 
-    int user_id = atoi(row[0]);
+    int user_id = std::atoi(PQgetvalue(result, 0, 0));
 
     RedisClient::get_instance()->set(token, std::to_string(user_id), 3600);
 
-    mysql_free_result(result);
+    PQclear(result);
     pool->release_connection(conn);
 
     return user_id;

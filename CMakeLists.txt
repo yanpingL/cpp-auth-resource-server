@@ -38,31 +38,18 @@ target_include_directories(${PROJECT_NAME}
 # - Threads: thread pool, mutexes, semaphores
 # - OpenSSL: SHA256 hashing in auth_utils.h
 # - nlohmann_json: JSON parsing/serialization in HTTP and service layers
-# - PkgConfig: used here to discover hiredis and MySQL/MariaDB client libs
+# - PkgConfig: used here to discover hiredis
+# - PostgreSQL: libpq client library used by the database layer
 find_package(Threads REQUIRED)
 find_package(OpenSSL REQUIRED)
 find_package(CURL REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(miniocpp CONFIG REQUIRED)
 find_package(PkgConfig REQUIRED)
+find_package(PostgreSQL REQUIRED)
 
 # Redis client library used by src/cache/redis_client.cpp.
 pkg_check_modules(HIREDIS REQUIRED IMPORTED_TARGET hiredis)
-
-# The database code uses the MySQL client library via <mysql/mysql.h>.
-# We look up the common pkg-config names used by MySQL development packages.
-pkg_check_modules(MYSQLCLIENT IMPORTED_TARGET mysqlclient)
-if(NOT MYSQLCLIENT_FOUND)
-    pkg_check_modules(MYSQLCLIENT IMPORTED_TARGET libmysqlclient)
-endif()
-
-# Fail early with a clear message if the MySQL development package is missing.
-if(NOT MYSQLCLIENT_FOUND)
-    message(FATAL_ERROR
-        "Could not find the MySQL client library. "
-        "Install libmysqlclient-dev."
-    )
-endif()
 
 # Link the executable against all external libraries required by the current code.
 target_link_libraries(${PROJECT_NAME}
@@ -73,7 +60,7 @@ target_link_libraries(${PROJECT_NAME}
         nlohmann_json::nlohmann_json
         miniocpp::miniocpp
         PkgConfig::HIREDIS
-        PkgConfig::MYSQLCLIENT
+        PostgreSQL::PostgreSQL
 )
 
 enable_testing()
