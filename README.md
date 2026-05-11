@@ -1,6 +1,6 @@
 # C++ Auth Resource Server
 
-A Scalable C++17 HTTP web server with user authentication, resource management, Redis-backed sessions, PostgreSQL persistence, Nginx load balancing, and MinIO file storage.
+A Scalable C++17 HTTP web server with JWT authentication, resource management, PostgreSQL persistence, Nginx load balancing, and MinIO file storage.
 
 ## What It Does
 
@@ -36,13 +36,13 @@ client -> MinIO: download file bytes
 
 ## Project Highlights
 
-**Tech Stack:** C++, Linux `epoll`, multithreading, RESTful API, PostgreSQL, Redis, Docker, Nginx, Git.
+**Tech Stack:** C++, Linux `epoll`, multithreading, RESTful API, JWT, PostgreSQL, Docker, Nginx, Git.
 
 - Built a high-performance multi-user backend system supporting authenticated CRUD operations and file upload/download through RESTful APIs.
 - Implemented an event-driven HTTP server using `epoll`-based Reactor non-blocking I/O and a custom thread pool, avoiding thread-per-connection overhead.
 - Designed a layered `Network -> Service -> DAO` architecture to separate HTTP handling, business logic, and database access.
 - Developed a thread-safe PostgreSQL connection pool with semaphore-based control to reduce connection contention under concurrent workloads.
-- Implemented token-based authentication with Redis TTL caching and PostgreSQL persistent session storage, following a cache-aside validation pattern.
+- Implemented stateless JWT bearer authentication with signed access tokens and expiry validation.
 - Deployed multiple C++ server instances behind Nginx load balancing and containerized the full system with Docker Compose.
 - Benchmarked approximately **4.9k requests/sec** under **1,000 concurrent connections** through Nginx load balancing, with **p90 latency around 221 ms**, **p99 latency around 247 ms**, and **0 errors** during the test.
 
@@ -64,8 +64,9 @@ Errors: 0
 
 ```text
 .
+├── db
+│   └── schema.sql
 ├── src
-│   ├── cache
 │   ├── dao
 │   ├── db
 │   ├── network
@@ -93,12 +94,8 @@ Nginx reverse proxy / load balancer
 
 Shared backend services used by both webservers:
 
-  Redis
-    - Fast token/session lookup cache.
-    - Avoids hitting PostgreSQL for every authenticated request.
-
   PostgreSQL
-    - Persistent users, sessions, and resource metadata.
+    - Persistent users and resource metadata.
     - Accessed through DAO classes and the connection pool.
 
   MinIO
@@ -133,11 +130,11 @@ Service layer
 
 DAO layer
   - Converts service requests into PostgreSQL operations.
-  - Reads and writes users, sessions, and resources.
+  - Reads and writes users and resources.
 
-Database/cache/storage adapters
+Database/auth/storage adapters
   - Connection pool manages PostgreSQL connections.
-  - Redis client caches token-to-user mappings.
+  - JWT utilities sign and verify bearer tokens.
   - Storage service signs MinIO presigned URLs.
 ```
 
@@ -149,7 +146,7 @@ Client request
   -> one C++ webserver
   -> epoll/main thread receives socket event
   -> thread pool processes http_conn
-  -> UserService validates token through Redis/PostgreSQL
+  -> UserService validates JWT signature, issuer, and expiry
   -> ResourceService handles business logic
   -> ResourceDAO uses PostgreSQL connection pool
   -> http_conn builds JSON response
@@ -171,10 +168,9 @@ backend -> MinIO presigned GET URL
 client -> MinIO downloads bytes directly
 ```
 
-The project uses three main storage systems:
+The project uses two main storage systems:
 
-- **PostgreSQL** is the persistent database. It stores users, sessions, and resource metadata.
-- **Redis** is the cache/session acceleration layer. It stores token-to-user mappings so authenticated requests can avoid hitting PostgreSQL every time.
+- **PostgreSQL** is the persistent database. It stores users and resource metadata.
 - **MinIO** is the object storage layer. It stores uploaded file bytes, while PostgreSQL stores the related resource metadata and public file URL.
 
 Main PostgreSQL tables:
@@ -185,15 +181,6 @@ users (
     name VARCHAR(255) NOT NULL,
     email VARCHAR(255) NOT NULL UNIQUE,
     password VARCHAR(255) NOT NULL
-)
-
-sessions (
-    id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    user_id INT NOT NULL,
-    token VARCHAR(255) NOT NULL UNIQUE,
-    expires_at TIMESTAMP NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 )
 
 resources (
@@ -243,7 +230,7 @@ Files:
 
 This layer owns business logic:
 
-- `UserService`: register/login behavior, password verification, session token creation.
+- `UserService`: register/login behavior, password verification, JWT creation and verification.
 - `ResourceService`: resource list/get/update/delete behavior, file-resource checks, delete-file cleanup.
 - `StorageService`: MinIO URL generation, AWS Signature V4 signing, upload validation, file deletion.
 
@@ -258,7 +245,7 @@ Files:
 
 This layer talks to PostgreSQL:
 
-- `UserDAO`: user lookup, session insert/delete, token validation, Redis token cache fallback.
+- `UserDAO`: user creation and lookup.
 - `ResourceDAO`: create, list, get, update, and delete resources.
 
 ### Database Layer
@@ -274,15 +261,6 @@ This layer manages a pool of PostgreSQL connections. The server initializes it i
 connPool->init("postgres", "webuser", "webpass123", "webdb", 5432, 10);
 ```
 
-### Cache Layer
-
-Files:
-
-- `src/cache/redis_client.cpp`
-- `src/cache/redis_client.h`
-
-Redis stores session token lookups so normal authenticated requests do not always need to hit PostgreSQL.
-
 ### Storage Layer
 
 Files:
@@ -294,17 +272,20 @@ MinIO stores uploaded file bytes. The backend does not usually stream file bytes
 
 - `PUT` presigned URL for upload.
 - `GET` presigned URL for download.
-- `DELETE` presigned URL used internally when deleting file resources.
+- MinIO SDK object delete used internally when deleting file resources.
 
 ### Utility Layer
 
 Files:
 
 - `src/utils/auth_utils.h`
+- `src/utils/env_utils.h`
+- `src/utils/jwt_utils.cpp`
+- `src/utils/jwt_utils.h`
 - `src/utils/logger.cpp`
 - `src/utils/logger.h`
 
-This layer contains password hashing helpers and thread-safe logging.
+This layer contains password hashing helpers, environment helpers, JWT signing/verification, and thread-safe logging.
 
 ## Main API Endpoints
 
@@ -316,7 +297,6 @@ Body:
 
 ```json
 {
-  "id": 2,
   "name": "Alice",
   "email": "alice@test.com",
   "password": "password"
@@ -347,9 +327,8 @@ Logic:
 
 - Looks up user by email.
 - Verifies password.
-- Creates a session token.
-- Stores session in PostgreSQL.
-- Caches token in Redis.
+- Creates a signed JWT access token.
+- Sets issuer, subject, issued-at, and expiration claims.
 - Returns `token` and `user_id`.
 
 ### `POST /api/logout`
@@ -365,8 +344,8 @@ Authorization: Bearer <token>
 Logic:
 
 - Validates token.
-- Deletes token from Redis.
-- Deletes session row from PostgreSQL.
+- Returns success and lets the client delete its local token.
+- Does not revoke the JWT server-side; the old token remains valid until its expiration time.
 
 ### `GET /api/resources`
 
@@ -499,8 +478,9 @@ The Docker Compose environment runs:
 - `sys-web-1`: first C++ server container, exposed directly at `localhost:8081`.
 - `sys-web-2`: second C++ server container, exposed directly at `localhost:8082`.
 - `sys-postgres`: PostgreSQL 16, exposed at `localhost:5432`.
-- `sys-redis`: Redis 7, exposed at `localhost:6379`.
+- `sys-db-init`: one-shot PostgreSQL schema initializer.
 - `sys-minio`: MinIO object storage, API at `localhost:9000`, console at `localhost:9001`.
+- `sys-minio-init`: one-shot MinIO bucket initializer.
 
 Important configured values:
 
@@ -519,7 +499,13 @@ MINIO_SECRET_KEY: minioadmin
 MINIO_UPLOAD_URL_EXPIRES: 300
 MINIO_DOWNLOAD_URL_EXPIRES: 300
 MINIO_MAX_FILENAME_LENGTH: 255
+
+JWT_SECRET: change-me-to-a-long-random-secret-before-production
+JWT_ISSUER: webserver
+JWT_EXPIRES_SECONDS: 3600
 ```
+
+Use a strong random `JWT_SECRET` for real deployments. The sample value is only for local development.
 
 MinIO console login:
 
@@ -529,11 +515,7 @@ Username: minioadmin
 Password: minioadmin
 ```
 
-Create a bucket named:
-
-```text
-webserver-files
-```
+The `webserver-files` bucket is created automatically by `sys-minio-init`.
 
 ## Run The Project
 
@@ -548,6 +530,25 @@ Build and start the containers:
 ```bash
 docker compose build
 docker compose up -d
+```
+
+During startup, Docker Compose also runs two idempotent initialization jobs:
+
+- `db-init`: applies `db/schema.sql` and creates PostgreSQL tables with `CREATE TABLE IF NOT EXISTS`.
+- `minio-init`: creates the `webserver-files` bucket with `mc mb --ignore-existing`.
+
+If the tables or bucket already exist, these jobs leave them unchanged.
+
+To run the initialization jobs manually for verification:
+
+```bash
+docker compose up db-init minio-init --no-recreate --abort-on-container-exit
+```
+
+To validate the Compose file itself:
+
+```bash
+docker compose config
 ```
 
 Build the C++ server inside both web containers:
@@ -592,14 +593,21 @@ This goes through Nginx and load-balances between `web1` and `web2`.
 
 ## Database Setup
 
-The application expects PostgreSQL tables for users, sessions, and resources. If your database is empty, create tables like this:
+Database setup is automatic when you run `docker compose up -d`. The schema lives in:
+
+```text
+db/schema.sql
+```
+
+The initializer applies it with `CREATE TABLE IF NOT EXISTS`, so rebuilding or recreating containers is safe.
+
+To inspect the database manually:
 
 ```bash
-# enter the PostgreSQL container
 docker exec -it sys-postgres psql -U webuser -d webdb
 ```
 
-Then run:
+The current schema is:
 
 ```sql
 CREATE TABLE users (
@@ -607,19 +615,6 @@ CREATE TABLE users (
     name VARCHAR(255) NOT NULL,
     email VARCHAR(255) NOT NULL UNIQUE,
     password VARCHAR(255) NOT NULL
-);
-
-CREATE TABLE sessions (
-    id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    user_id INT NOT NULL,
-    token VARCHAR(255) NOT NULL UNIQUE,
-    expires_at TIMESTAMP NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT fk_sessions_user
-        FOREIGN KEY (user_id)
-        REFERENCES users(id)
-        ON DELETE CASCADE
 );
 
 CREATE TABLE resources (
@@ -637,14 +632,14 @@ CREATE TABLE resources (
 );
 ```
 
-For the current API tests, the database also expects a sample user and two resources. After the tables exist and the webserver processes are running, create those records through the API from a local terminal.
+The API tests create and clean up their own records through the HTTP API. For manual testing, you can create a sample user and resources from a local terminal.
 
 Create the sample user:
 
 ```bash
 curl -s -X POST http://localhost:8080/api/register \
   -H "Content-Type: application/json" \
-  -d '{"id":1,"name":"Andrew","email":"andrew@test.com","password":"hash3"}'
+  -d '{"name":"Andrew","email":"andrew@test.com","password":"hash3"}'
 ```
 
 Response:
@@ -667,6 +662,8 @@ The response contains a token:
 {"token":"...","user_id":1}
 ```
 
+The token is a JWT and should be sent as `Authorization: Bearer <token>` for authenticated endpoints.
+
 Save the token in your local terminal:
 
 ```bash
@@ -679,7 +676,7 @@ Create the two sample resources:
 curl -s -X POST http://localhost:8080/api/resources \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"id":1,"title":"First resource","content":"hello world","is_file":false}'
+  -d '{"title":"First resource","content":"hello world","is_file":false}'
 ```
 
 Response:
@@ -692,7 +689,7 @@ Response:
 curl -s -X POST http://localhost:8080/api/resources \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"id":2,"title":"Second resource","content":"hello People","is_file":false}'
+  -d '{"title":"Second resource","content":"hello People","is_file":false}'
 ```
 
 Response:
@@ -710,8 +707,10 @@ curl -s -X POST http://localhost:8080/api/logout \
 Response:
 
 ```json
-{"message":"logout success"}
+{"status":"logout success"}
 ```
+
+This endpoint is stateless: the client should delete its local token after this response. The JWT remains cryptographically valid until its configured expiration time.
 
 
 ## For Specific Function Test, Send Requests From Your Local Terminal
@@ -728,6 +727,8 @@ The response contains a token:
 ```json
 {"token":"...","user_id":1}
 ```
+
+The token is a JWT and should be sent as `Authorization: Bearer <token>` for authenticated endpoints.
 
 Save it in your shell:
 
@@ -767,7 +768,7 @@ Response:
 curl -s -X POST http://localhost:8080/api/resources \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"id":1001,"title":"Note","content":"hello from curl","is_file":false}'
+  -d '{"title":"Note","content":"hello from curl","is_file":false}'
 ```
 
 Response:
@@ -873,7 +874,7 @@ No response body. A successful upload returns HTTP 200 OK.
 curl -s -X POST http://localhost:8080/api/resources \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d "{\"id\":1002,\"title\":\"Uploaded file\",\"content\":\"$PUBLIC_URL\",\"is_file\":true}"
+  -d "{\"title\":\"Uploaded file\",\"content\":\"$PUBLIC_URL\",\"is_file\":true}"
 ```
 
 Response:
@@ -926,11 +927,17 @@ curl -s -X POST http://localhost:8080/api/logout \
 Response:
 
 ```json
-{"message":"logout success"}
+{"status":"logout success"}
 ```
 
 ## Run Tests
-Run the Python API tests in local terminal:
+Run the C++ unit tests inside a web container:
+
+```bash
+docker exec sys-web-1 bash -lc "cd /workspace && cmake --build build --target unit_tests && ./build/bin/unit_tests"
+```
+
+Run the Python API tests from your local terminal:
 
 ```bash
 python3 -m pytest tests/api_tests.py
@@ -942,7 +949,7 @@ Response:
 All tests should pass.
 ```
 
-The API tests expect the Docker services, both webserver processes, PostgreSQL data, Redis, and MinIO bucket to be available.
+The API tests expect the Docker services, both webserver processes, PostgreSQL tables, JWT environment variables, and MinIO bucket to be available. The Compose init jobs create the tables and bucket automatically.
 
 ## Notes
 

@@ -1,6 +1,7 @@
 #include "user_service.h"
 #include "dao/user_dao.h"
 #include "utils/auth_utils.h"
+#include "utils/jwt_utils.h"
 
 // Creates a user and returns a JSON status object.
 json_type UserService::create_user(const UserInfo& Info) {
@@ -25,7 +26,7 @@ json_type UserService::create_user(const UserInfo& Info) {
 
 
 
-// Authenticates a user, creates a session token, and returns login JSON.
+// Authenticates a user, creates a JWT bearer token, and returns login JSON.
 json_type UserService::login(const UserInfo& Info) {
 
     auto user_opt = UserDAO::get_user_by_email(Info.email);
@@ -44,15 +45,10 @@ json_type UserService::login(const UserInfo& Info) {
         res["error"] = UserDAO::msg;
         return res;
     }
-    // Generate Token
-    std::string token = generate_token();
+    // Generate signed JWT.
+    std::string token = JwtUtils::create_jwt(user.id);
     if (token.empty()) {
         UserDAO::msg = "token generation failed";
-        res["error"] = UserDAO::msg;
-        return res;
-    }
-    // Create user session
-    if (!UserDAO::create_session(user.id, token, 3600)) {
         res["error"] = UserDAO::msg;
         return res;
     }
@@ -66,17 +62,13 @@ json_type UserService::login(const UserInfo& Info) {
 
 // Resolves a bearer token to the authenticated user id.
 std::optional<int> UserService::get_user_id_from_token(const std::string& token) {
-    return UserDAO::get_user_id_from_token(token);
+    return JwtUtils::verify_jwt_and_get_user_id(token);
 }
 
 
 json_type UserService::logout(const std::string& token) {
-    bool result = UserDAO::delete_session(token);
+    (void)token;
     json_type res;
-    if (!result){
-        res["error"] = UserDAO::msg;
-    } else {
-        res["status"] = "Logout Succed";
-    }
+    res["status"] = "logout success";
     return res;
 }

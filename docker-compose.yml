@@ -22,10 +22,14 @@ services:
       MINIO_UPLOAD_URL_EXPIRES: 300
       MINIO_DOWNLOAD_URL_EXPIRES: 300
       MINIO_MAX_FILENAME_LENGTH: 255
+      JWT_SECRET: change-me-to-a-long-random-secret-before-production
+      JWT_ISSUER: webserver
+      JWT_EXPIRES_SECONDS: 3600
     depends_on:
-      - postgres
-      - redis
-      - minio
+      db-init:
+        condition: service_completed_successfully
+      minio-init:
+        condition: service_completed_successfully
     ports:
       - "8081:8080"  #external port 8081 mapped into internal container port 8080
     stdin_open: true
@@ -54,10 +58,14 @@ services:
       MINIO_UPLOAD_URL_EXPIRES: 300
       MINIO_DOWNLOAD_URL_EXPIRES: 300
       MINIO_MAX_FILENAME_LENGTH: 255
+      JWT_SECRET: change-me-to-a-long-random-secret-before-production
+      JWT_ISSUER: webserver
+      JWT_EXPIRES_SECONDS: 3600
     depends_on:
-      - postgres
-      - redis
-      - minio
+      db-init:
+        condition: service_completed_successfully
+      minio-init:
+        condition: service_completed_successfully
     ports:
       - "8082:8080"
     stdin_open: true
@@ -86,13 +94,25 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-  
-  redis: # Newly added Redis service
-    image: redis:7
-    container_name: sys-redis
-    ports: 
-      - "6379:6379"
 
+  db-init:
+    image: postgres:16
+    container_name: sys-db-init
+    depends_on:
+      - postgres
+    environment:
+      PGPASSWORD: webpass123
+    volumes:
+      - ./db/schema.sql:/schema.sql:ro
+    command:
+      - sh
+      - -c
+      - |
+        until psql -h postgres -U webuser -d webdb -v ON_ERROR_STOP=1 -f /schema.sql; do
+          echo "waiting for postgres..."
+          sleep 2
+        done
+  
   minio:
     image: minio/minio:latest
     container_name: sys-minio
@@ -105,6 +125,21 @@ services:
       - "9001:9001"
     volumes:
       - minio_data:/data
+
+  minio-init:
+    image: minio/mc:latest
+    container_name: sys-minio-init
+    depends_on:
+      - minio
+    entrypoint:
+      - sh
+      - -c
+      - |
+        until mc alias set local http://minio:9000 minioadmin minioadmin; do
+          echo "waiting for minio..."
+          sleep 2
+        done
+        mc mb --ignore-existing local/webserver-files
 
 
 volumes:

@@ -17,10 +17,6 @@ public:
     
     static bool create_user(const User& user);
     static std::optional<User> get_user_by_email(const std::string& email);
-
-    static bool create_session(int user_id, const std::string& token, int ttl_seconds);
-    static bool delete_session(const std::string& token);
-    static std::optional<int> get_user_id_from_token(const std::string& token);
 };
 
 #endif
