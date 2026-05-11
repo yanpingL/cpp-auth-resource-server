@@ -43,6 +43,7 @@ target_include_directories(${PROJECT_NAME}
 find_package(Threads REQUIRED)
 find_package(OpenSSL REQUIRED)
 find_package(CURL REQUIRED)
+find_package(GTest REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(miniocpp CONFIG REQUIRED)
 find_package(PkgConfig REQUIRED)
@@ -64,6 +65,7 @@ target_link_libraries(${PROJECT_NAME}
 )
 
 enable_testing()
+include(GoogleTest)
 
 add_executable(unit_tests
     tests/unit_tests.cpp
@@ -77,6 +79,7 @@ target_include_directories(unit_tests
 target_link_libraries(unit_tests
     PRIVATE
         OpenSSL::Crypto
+        GTest::gtest_main
 )
 
-add_test(NAME unit_tests COMMAND unit_tests)
+gtest_discover_tests(unit_tests)

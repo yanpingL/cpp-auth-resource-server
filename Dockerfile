@@ -30,6 +30,7 @@ RUN apt-get update -o Acquire::Retries=5 && \
 	      libhiredis-dev \
 	      libcurl4-openssl-dev \
 	      libssl-dev \
+	      libgtest-dev \
     && yes | unminimize \
     && rm -rf /var/lib/apt/lists/*
 
