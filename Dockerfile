@@ -27,7 +27,6 @@ RUN apt-get update -o Acquire::Retries=5 && \
       manpages-dev \
 	      nlohmann-json3-dev \
 	      libpq-dev \
-	      libhiredis-dev \
 	      libcurl4-openssl-dev \
 	      libssl-dev \
 	      libgtest-dev \
@@ -36,7 +35,7 @@ RUN apt-get update -o Acquire::Retries=5 && \
 
 RUN git clone https://github.com/microsoft/vcpkg.git ${VCPKG_ROOT} \
     && ${VCPKG_ROOT}/bootstrap-vcpkg.sh \
-    && ${VCPKG_ROOT}/vcpkg install minio-cpp
+    && ${VCPKG_ROOT}/vcpkg install minio-cpp jwt-cpp
 
 WORKDIR /workspace
 

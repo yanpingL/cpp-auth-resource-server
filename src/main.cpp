@@ -17,7 +17,7 @@
 #include "network/http_conn.h"
 #include "db/connection_pool.h"
 #include "utils/logger.h"
-#include "cache/redis_client.h"
+#include "utils/env_utils.h"
 
 
 
@@ -38,32 +38,6 @@ extern void removefd(int epollfd, int fd);
 extern void modfd(int epollfd, int fd, int ev);
 extern void addfd(int epollfd, int fd, bool one_shot);
 
-namespace {
-
-std::string get_env_or_default(const char* name, const std::string& fallback) {
-    const char* value = std::getenv(name);
-    if (value == nullptr || value[0] == '\0') {
-        return fallback;
-    }
-    return value;
-}
-
-int get_env_int_or_default(const char* name, int fallback) {
-    const char* value = std::getenv(name);
-    if (value == nullptr || value[0] == '\0') {
-        return fallback;
-    }
-
-    char* end = nullptr;
-    long parsed = std::strtol(value, &end, 10);
-    if (end == value || *end != '\0') {
-        return fallback;
-    }
-    return static_cast<int>(parsed);
-}
-
-} // namespace
-
 // Set the port number by command line
 // Boots the server, initializes shared services, and runs the epoll event loop.
 int main(int argc, char* argv[]){
@@ -80,6 +54,16 @@ int main(int argc, char* argv[]){
     // Ignore SIGPIPE so a broken client connection does not terminate the server.
     addsig(SIGPIPE, SIG_IGN);
 
+    Logger::get_instance()->init("server.log");
+
+    const std::string jwt_secret = EnvUtils::get_env_or_default("JWT_SECRET", "");
+    const int jwt_expires_seconds =
+        EnvUtils::get_env_int_or_default("JWT_EXPIRES_SECONDS", 3600);
+    if (jwt_secret.empty() || jwt_expires_seconds <= 0) {
+        Logger::get_instance()->log(ERROR, "invalid JWT configuration");
+        return 1;
+    }
+
     threadpool<http_conn> * pool = NULL;
     try{
         pool = new threadpool<http_conn>(10, 10000);
@@ -89,17 +73,13 @@ int main(int argc, char* argv[]){
 
     connection_pool* connPool = connection_pool::get_instance();
     connPool->init(
-        get_env_or_default("POSTGRES_HOST", "postgres"),
-        get_env_or_default("POSTGRES_USER", "webuser"),
-        get_env_or_default("POSTGRES_PASSWORD", "webpass123"),
-        get_env_or_default("POSTGRES_DB", "webdb"),
-        get_env_int_or_default("POSTGRES_PORT", 5432),
+        EnvUtils::get_env_or_default("POSTGRES_HOST", "postgres"),
+        EnvUtils::get_env_or_default("POSTGRES_USER", "webuser"),
+        EnvUtils::get_env_or_default("POSTGRES_PASSWORD", "webpass123"),
+        EnvUtils::get_env_or_default("POSTGRES_DB", "webdb"),
+        EnvUtils::get_env_int_or_default("POSTGRES_PORT", 5432),
         10
     );
-
-    RedisClient::get_instance()->connect("sys-redis", 6379);
-
-    Logger::get_instance()->init("server.log");
 
     // Connection objects are indexed directly by socket fd.
     http_conn * users = new http_conn[MAX_FD];

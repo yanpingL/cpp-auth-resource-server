@@ -15,7 +15,6 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 # Header-only utilities such as auth_utils.h do not need to be listed here.
 set(WEBSERVER_SOURCES
     src/main.cpp
-    src/cache/redis_client.cpp
     src/dao/resource_dao.cpp
     src/dao/user_dao.cpp
     src/db/connection_pool.cpp
@@ -23,6 +22,7 @@ set(WEBSERVER_SOURCES
     src/service/resource_service.cpp
     src/service/storage_service.cpp
     src/service/user_service.cpp
+    src/utils/jwt_utils.cpp
     src/utils/logger.cpp
 )
 
@@ -38,7 +38,7 @@ target_include_directories(${PROJECT_NAME}
 # - Threads: thread pool, mutexes, semaphores
 # - OpenSSL: SHA256 hashing in auth_utils.h
 # - nlohmann_json: JSON parsing/serialization in HTTP and service layers
-# - PkgConfig: used here to discover hiredis
+# - jwt-cpp: JWT creation and verification for bearer authentication
 # - PostgreSQL: libpq client library used by the database layer
 find_package(Threads REQUIRED)
 find_package(OpenSSL REQUIRED)
@@ -46,11 +46,8 @@ find_package(CURL REQUIRED)
 find_package(GTest REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(miniocpp CONFIG REQUIRED)
-find_package(PkgConfig REQUIRED)
+find_package(jwt-cpp CONFIG REQUIRED)
 find_package(PostgreSQL REQUIRED)
-
-# Redis client library used by src/cache/redis_client.cpp.
-pkg_check_modules(HIREDIS REQUIRED IMPORTED_TARGET hiredis)
 
 # Link the executable against all external libraries required by the current code.
 target_link_libraries(${PROJECT_NAME}
@@ -60,7 +57,7 @@ target_link_libraries(${PROJECT_NAME}
         CURL::libcurl
         nlohmann_json::nlohmann_json
         miniocpp::miniocpp
-        PkgConfig::HIREDIS
+        jwt-cpp::jwt-cpp
         PostgreSQL::PostgreSQL
 )
 
@@ -69,6 +66,7 @@ include(GoogleTest)
 
 add_executable(unit_tests
     tests/unit_tests.cpp
+    src/utils/jwt_utils.cpp
 )
 
 target_include_directories(unit_tests
@@ -79,6 +77,8 @@ target_include_directories(unit_tests
 target_link_libraries(unit_tests
     PRIVATE
         OpenSSL::Crypto
+        nlohmann_json::nlohmann_json
+        jwt-cpp::jwt-cpp
         GTest::gtest_main
 )
 
