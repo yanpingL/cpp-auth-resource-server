@@ -33,7 +33,7 @@ public:
     static int m_epollfd;
     static int m_user_count;
 
-    static const int READ_BUFFER_SIZE = 2048;
+    static const int READ_BUFFER_SIZE = 65536;
     static const int WRITE_BUFFER_SIZE = 1024;
     static const int FILENAME_LEN = 200;
 

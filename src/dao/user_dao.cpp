@@ -1,4 +1,5 @@
 #include "user_dao.h"
+#include "dao/dao_util.h"
 #include "db/connection_pool.h"
 #include "utils/logger.h"
 
@@ -7,21 +8,10 @@
 
 std::string UserDAO::msg;
 
-namespace {
-
-bool command_ok(PGconn* conn, PGresult* result, const std::string& sql, std::string& msg) {
-    bool success = PQresultStatus(result) == PGRES_COMMAND_OK;
-    if (!success) {
-        msg = std::string("Query failed: ") + PQerrorMessage(conn);
-        Logger::get_instance()->log(ERROR, msg + " SQL: " + sql);
-    }
-    return success;
-}
-
-} // namespace
-
 // Creates a user record.
 bool UserDAO::create_user(const User& user) {
+    msg.clear();
+
     connection_pool* pool = connection_pool::get_instance();
     PGconn* conn = pool->get_connection();
 
@@ -31,14 +21,24 @@ bool UserDAO::create_user(const User& user) {
         return false;
     }
 
-    std::string sql =
-        "INSERT INTO users (name, email, password) VALUES ('" +
-        user.name + "', '" +
-        user.email + "', '" +
-        user.password + "')";
+    const char* sql =
+        "INSERT INTO users (name, email, password) VALUES ($1, $2, $3)";
+    const char* values[] = {
+        user.name.c_str(),
+        user.email.c_str(),
+        user.password.c_str(),
+    };
 
-    PGresult* result = PQexec(conn, sql.c_str());
-    bool success = command_ok(conn, result, sql, msg);
+    PGresult* result = PQexecParams(
+        conn,
+        sql,
+        3,
+        nullptr,
+        values,
+        nullptr,
+        nullptr,
+        0);
+    bool success = DaoUtil::command_ok(conn, result, sql, msg);
 
     PQclear(result);
     pool->release_connection(conn);
@@ -47,6 +47,8 @@ bool UserDAO::create_user(const User& user) {
 
 // Loads one user by email for login.
 std::optional<User> UserDAO::get_user_by_email(const std::string& email) {
+    msg.clear();
+
     connection_pool* pool = connection_pool::get_instance();
     PGconn* conn = pool->get_connection();
 
@@ -56,12 +58,23 @@ std::optional<User> UserDAO::get_user_by_email(const std::string& email) {
         return std::nullopt;
     }
 
-    std::string sql =
-        "SELECT id, name, email, password FROM users WHERE email='" + email + "'";
+    const char* sql =
+        "SELECT id, name, email, password FROM users WHERE email=$1";
+    const char* values[] = {
+        email.c_str(),
+    };
 
-    Logger::get_instance()->log(DEBUG, "SQL: " + sql);
+    Logger::get_instance()->log(DEBUG, std::string("SQL: ") + sql);
 
-    PGresult* result = PQexec(conn, sql.c_str());
+    PGresult* result = PQexecParams(
+        conn,
+        sql,
+        1,
+        nullptr,
+        values,
+        nullptr,
+        nullptr,
+        0);
     if (PQresultStatus(result) != PGRES_TUPLES_OK) {
         msg = std::string("Query failed: ") + PQerrorMessage(conn);
         Logger::get_instance()->log(ERROR, msg + " SQL: " + sql);

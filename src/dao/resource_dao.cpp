@@ -1,4 +1,5 @@
 #include "resource_dao.h"
+#include "dao/dao_util.h"
 #include "db/connection_pool.h"
 #include "utils/logger.h"
 
@@ -6,33 +7,6 @@
 #include <iostream>
 
 std::string ResourceDAO::msg;
-
-namespace {
-
-bool command_ok(PGconn* conn, PGresult* result, const std::string& sql, std::string& msg) {
-    bool success = PQresultStatus(result) == PGRES_COMMAND_OK;
-    if (!success) {
-        msg = std::string("Query failed: ") + PQerrorMessage(conn);
-        Logger::get_instance()->log(ERROR, msg + " SQL: " + sql);
-    }
-    return success;
-}
-
-bool affected_rows(PGresult* result) {
-    const char* rows = PQcmdTuples(result);
-    return rows != nullptr && rows[0] != '\0' && std::atoi(rows) > 0;
-}
-
-bool pg_bool_value(PGresult* result, int row, int col) {
-    const char* value = PQgetvalue(result, row, col);
-    return value != nullptr && (value[0] == 't' || value[0] == '1');
-}
-
-std::string nullable_value(PGresult* result, int row, int col) {
-    return PQgetisnull(result, row, col) ? "" : PQgetvalue(result, row, col);
-}
-
-} // namespace
 
 // Executes a resource INSERT statement.
 bool ResourceDAO::create_resource(const Resource& resource) {
@@ -47,15 +21,28 @@ bool ResourceDAO::create_resource(const Resource& resource) {
         return false;
     }
 
-    std::string sql =
-        "INSERT INTO resources (user_id, title, content, is_file) VALUES (" +
-        std::to_string(resource.user_id) + ", '" +
-        resource.title + "', '" +
-        resource.content + "', " +
-        (resource.is_file ? "TRUE" : "FALSE") + ")";
+    const char* sql =
+        "INSERT INTO resources (user_id, title, content, is_file) "
+        "VALUES ($1::int, $2, $3, $4::boolean)";
+    std::string user_id = std::to_string(resource.user_id);
+    std::string is_file = resource.is_file ? "true" : "false";
+    const char* values[] = {
+        user_id.c_str(),
+        resource.title.c_str(),
+        resource.content.c_str(),
+        is_file.c_str(),
+    };
 
-    PGresult* result = PQexec(conn, sql.c_str());
-    bool success = command_ok(conn, result, sql, msg);
+    PGresult* result = PQexecParams(
+        conn,    // DB connection
+        sql,     // SQL query string
+        4,       // #Parameters
+        nullptr, // Parameter types
+        values,  // Actual values
+        nullptr, // Parameter length
+        nullptr, // Parameter formats
+        0);      // Return results in text format, not binary
+    bool success = DaoUtil::command_ok(conn, result, sql, msg);
 
     PQclear(result);
     pool->release_connection(conn);
@@ -76,11 +63,23 @@ std::vector<Resource> ResourceDAO::get_resources(int user_id) {
         return res;
     }
 
-    std::string sql =
-        "SELECT id, title, content, is_file FROM resources WHERE user_id=" +
-        std::to_string(user_id);
+    const char* sql =
+        "SELECT id, title, content, is_file FROM resources "
+        "WHERE user_id=$1::int";
+    std::string user_id_value = std::to_string(user_id);
+    const char* values[] = {
+        user_id_value.c_str(),
+    };
 
-    PGresult* result = PQexec(conn, sql.c_str());
+    PGresult* result = PQexecParams(
+        conn,
+        sql,
+        1,
+        nullptr,
+        values,
+        nullptr,
+        nullptr,
+        0);
     if (PQresultStatus(result) != PGRES_TUPLES_OK) {
         msg = std::string("Query failed: ") + PQerrorMessage(conn);
         Logger::get_instance()->log(ERROR, msg + " SQL: " + sql);
@@ -93,9 +92,9 @@ std::vector<Resource> ResourceDAO::get_resources(int user_id) {
     for (int row = 0; row < row_count; ++row) {
         Resource r;
         r.id = std::atoi(PQgetvalue(result, row, 0));
-        r.title = nullable_value(result, row, 1);
-        r.content = nullable_value(result, row, 2);
-        r.is_file = pg_bool_value(result, row, 3);
+        r.title = DaoUtil::nullable_value(result, row, 1);
+        r.content = DaoUtil::nullable_value(result, row, 2);
+        r.is_file = DaoUtil::pg_bool_value(result, row, 3);
 
         res.push_back(r);
     }
@@ -119,11 +118,25 @@ std::optional<Resource> ResourceDAO::get_resource(int user_id, int id) {
         return std::nullopt;
     }
 
-    std::string sql =
-        "SELECT id, title, content, is_file FROM resources WHERE user_id=" +
-        std::to_string(user_id) + " AND id=" + std::to_string(id);
+    const char* sql =
+        "SELECT id, title, content, is_file FROM resources "
+        "WHERE user_id=$1::int AND id=$2::int";
+    std::string user_id_value = std::to_string(user_id);
+    std::string id_value = std::to_string(id);
+    const char* values[] = {
+        user_id_value.c_str(),
+        id_value.c_str(),
+    };
 
-    PGresult* result = PQexec(conn, sql.c_str());
+    PGresult* result = PQexecParams(
+        conn,
+        sql,
+        2,
+        nullptr,
+        values,
+        nullptr,
+        nullptr,
+        0);
     if (PQresultStatus(result) != PGRES_TUPLES_OK) {
         msg = std::string("Query failed: ") + PQerrorMessage(conn);
         Logger::get_instance()->log(ERROR, msg + " SQL: " + sql);
@@ -142,9 +155,9 @@ std::optional<Resource> ResourceDAO::get_resource(int user_id, int id) {
 
     Resource r;
     r.id = std::atoi(PQgetvalue(result, 0, 0));
-    r.title = nullable_value(result, 0, 1);
-    r.content = nullable_value(result, 0, 2);
-    r.is_file = pg_bool_value(result, 0, 3);
+    r.title = DaoUtil::nullable_value(result, 0, 1);
+    r.content = DaoUtil::nullable_value(result, 0, 2);
+    r.is_file = DaoUtil::pg_bool_value(result, 0, 3);
 
     PQclear(result);
     pool->release_connection(conn);
@@ -164,17 +177,29 @@ bool ResourceDAO::update_resource(const Resource& resource) {
         return false;
     }
 
-    std::string sql =
-        "UPDATE resources SET title='" +
-        resource.title + "', content='" +
-        resource.content + "', is_file=" +
-        (resource.is_file ? "TRUE" : "FALSE") +
-        " WHERE user_id=" + std::to_string(resource.user_id) +
-        " AND id=" + std::to_string(resource.id);
+    const char* sql =
+        "UPDATE resources SET title=$1, content=$2 "
+        "WHERE user_id=$3::int AND id=$4::int";
+    std::string user_id = std::to_string(resource.user_id);
+    std::string id = std::to_string(resource.id);
+    const char* values[] = {
+        resource.title.c_str(),
+        resource.content.c_str(),
+        user_id.c_str(),
+        id.c_str(),
+    };
 
-    PGresult* result = PQexec(conn, sql.c_str());
-    bool success = command_ok(conn, result, sql, msg);
-    if (success && !affected_rows(result)) {
+    PGresult* result = PQexecParams(
+        conn,
+        sql,
+        4,
+        nullptr,
+        values,
+        nullptr,
+        nullptr,
+        0);
+    bool success = DaoUtil::command_ok(conn, result, sql, msg);
+    if (success && !DaoUtil::affected_rows(result)) {
         success = false;
         msg = std::string("No change proceeded.");
         Logger::get_instance()->log(ERROR, msg);
@@ -198,15 +223,28 @@ bool ResourceDAO::delete_resource(int user_id, int id) {
         return false;
     }
 
-    std::string sql =
-        "DELETE FROM resources WHERE id=" + std::to_string(id) +
-        " AND user_id=" + std::to_string(user_id);
+    const char* sql =
+        "DELETE FROM resources WHERE id=$1::int AND user_id=$2::int";
+    std::string id_value = std::to_string(id);
+    std::string user_id_value = std::to_string(user_id);
+    const char* values[] = {
+        id_value.c_str(),
+        user_id_value.c_str(),
+    };
 
-    Logger::get_instance()->log(DEBUG, "SQL: " + sql);
+    Logger::get_instance()->log(DEBUG, std::string("SQL: ") + sql);
 
-    PGresult* result = PQexec(conn, sql.c_str());
-    bool success = command_ok(conn, result, sql, msg);
-    if (success && !affected_rows(result)) {
+    PGresult* result = PQexecParams(
+        conn,
+        sql,
+        2,
+        nullptr,
+        values,
+        nullptr,
+        nullptr,
+        0);
+    bool success = DaoUtil::command_ok(conn, result, sql, msg);
+    if (success && !DaoUtil::affected_rows(result)) {
         success = false;
         msg = std::string("Resource not found.");
         Logger::get_instance()->log(ERROR, msg);

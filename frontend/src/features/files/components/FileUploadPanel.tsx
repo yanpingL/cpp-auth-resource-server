@@ -15,7 +15,11 @@ const allowedTypes = [
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 ];
 
-export function FileUploadPanel() {
+type FileUploadPanelProps = {
+  onUploaded?: () => void;
+};
+
+export function FileUploadPanel({ onUploaded }: FileUploadPanelProps) {
   const queryClient = useQueryClient();
   // UI state: title is typed text; file is the selected local File object.
   const [title, setTitle] = useState("");
@@ -45,6 +49,7 @@ export function FileUploadPanel() {
       setTitle("");
       setFile(null);
       queryClient.invalidateQueries({ queryKey: ["resources"] });
+      onUploaded?.();
     },
   });
 
@@ -90,7 +95,7 @@ export function FileUploadPanel() {
       ) : null}
 
       <button
-        className="rounded-md bg-slate-950 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+        className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
         disabled={
           uploadMutation.isPending || !file || !allowedTypes.includes(file.type)
         }

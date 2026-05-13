@@ -28,13 +28,23 @@ export function LoginForm() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-50 px-6 text-slate-950">
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#202124] px-6 text-slate-950">
+      <div
+        aria-hidden="true"
+        className="home-page-background absolute inset-0 bg-[url('/home_page.jpg')] bg-cover bg-center"
+      />
+      <div aria-hidden="true" className="absolute inset-0 bg-black/65" />
       <form
-        className="w-full max-w-md space-y-5 rounded-lg border border-slate-200 bg-white p-6 shadow-sm"
+        className="relative z-10 w-full max-w-md space-y-5 rounded-lg border border-white/20 bg-white p-6 shadow-2xl shadow-black/30"
         onSubmit={handleSubmit}
       >
         <div>
-          <h1 className="text-2xl font-semibold">Login</h1>
+          <Link className="inline-flex items-center gap-3 font-semibold" href="/">
+            <span className="flex size-10 items-center justify-center rounded-md bg-slate-950 text-xl font-bold text-white">
+              R
+            </span>
+            <span className="text-2xl text-slate-950">esource Manager</span>
+          </Link>
           <p className="mt-1 text-sm text-slate-600">
             Use your registered email and password.
           </p>
