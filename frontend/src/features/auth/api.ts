@@ -18,6 +18,7 @@ export type RegisterResponse = {
 
 export type LoginResponse = {
   user_id: number;
+  name: string;
   token: string;
 };
 

@@ -16,14 +16,14 @@ export function UploadFilePage() {
   }, [router]);
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-[#202124] px-6 py-10 text-slate-950">
+    <main className="relative h-screen overflow-hidden bg-[#202124] px-6 py-10 text-slate-950">
       <div
         aria-hidden="true"
         className="absolute inset-0 bg-[url('/user_space_background.jpg')] bg-cover bg-center"
       />
       <div aria-hidden="true" className="absolute inset-0 bg-black/55" />
 
-      <section className="relative z-10 mx-auto w-full max-w-xl space-y-5">
+      <section className="relative z-10 mx-auto h-full w-full max-w-xl space-y-5 overflow-y-auto">
         <div>
           <Link
             className="inline-flex items-center gap-2 rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-black/20 transition hover:-translate-y-0.5 hover:bg-slate-700"

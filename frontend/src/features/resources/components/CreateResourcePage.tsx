@@ -32,14 +32,14 @@ export function CreateResourcePage() {
   }
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-[#202124] px-6 py-10 text-slate-950">
+    <main className="relative h-screen overflow-hidden bg-[#202124] px-6 py-10 text-slate-950">
       <div
         aria-hidden="true"
         className="absolute inset-0 bg-[url('/user_space_background.jpg')] bg-cover bg-center"
       />
       <div aria-hidden="true" className="absolute inset-0 bg-black/55" />
 
-      <section className="relative z-10 mx-auto w-full max-w-5xl space-y-5">
+      <section className="relative z-10 mx-auto flex h-full w-full max-w-5xl flex-col gap-5 overflow-hidden">
         <div>
           <Link
             className="inline-flex items-center gap-2 rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-black/20 transition hover:-translate-y-0.5 hover:bg-slate-700"
@@ -49,16 +49,17 @@ export function CreateResourcePage() {
           </Link>
         </div>
 
-        <div className="rounded-lg border border-white/15 bg-white/90 p-6 shadow-2xl shadow-black/20 backdrop-blur-sm md:p-8">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-white/15 bg-white/90 p-6 shadow-2xl shadow-black/20 backdrop-blur-sm md:p-8">
           <h1 className="text-3xl font-semibold">Create Resource</h1>
           <p className="mt-1 text-sm text-slate-600">
             Write plain text or Markdown. Headings, lists, links, code, and bold
             text will render on the detail page.
           </p>
 
-          <div className="mt-6">
+          <div className="mt-6 min-h-0 flex-1">
             <ResourceForm
               editorSize="large"
+              fillAvailableHeight
               isSubmitting={createMutation.isPending}
               onCancel={() => router.push("/resources")}
               onSubmit={handleCreate}

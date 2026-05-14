@@ -39,4 +39,23 @@ describe("ResourceForm", () => {
     expect(screen.getByLabelText("Title")).toHaveValue("Existing");
     expect(screen.getByLabelText("Content")).toHaveValue("Saved body");
   });
+
+  it("can make only the content field fill and scroll within the available height", () => {
+    const { container } = render(
+      <ResourceForm
+        fillAvailableHeight
+        isSubmitting={false}
+        onSubmit={vi.fn()}
+        submitLabel="Create resource"
+      />,
+    );
+    const form = container.querySelector("form");
+
+    expect(form).toHaveClass("flex", "h-full", "min-h-0");
+    expect(screen.getByLabelText("Content")).toHaveClass(
+      "flex-1",
+      "overflow-y-auto",
+      "resize-none",
+    );
+  });
 });

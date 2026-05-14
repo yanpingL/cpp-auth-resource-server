@@ -6,6 +6,7 @@ import type { ResourceFormValues } from "../types";
 
 type ResourceFormProps = {
   editorSize?: "default" | "large";
+  fillAvailableHeight?: boolean;
   initialValues?: ResourceFormValues;
   isSubmitting: boolean;
   onCancel?: () => void;
@@ -20,6 +21,7 @@ const emptyValues: ResourceFormValues = {
 
 export function ResourceForm({
   editorSize = "default",
+  fillAvailableHeight = false,
   initialValues = emptyValues,
   isSubmitting,
   onCancel,
@@ -35,7 +37,10 @@ export function ResourceForm({
   }
 
   return (
-    <form className="space-y-4" onSubmit={handleSubmit}>
+    <form
+      className={fillAvailableHeight ? "flex h-full min-h-0 flex-col gap-4" : "space-y-4"}
+      onSubmit={handleSubmit}
+    >
       <label className="block space-y-2 text-sm font-medium">
         <span>Title</span>
         <input
@@ -46,11 +51,21 @@ export function ResourceForm({
         />
       </label>
 
-      <label className="block space-y-2 text-sm font-medium">
+      <label
+        className={
+          fillAvailableHeight
+            ? "flex min-h-0 flex-1 flex-col gap-2 text-sm font-medium"
+            : "block space-y-2 text-sm font-medium"
+        }
+      >
         <span>Content</span>
         <textarea
           className={`w-full resize-y rounded-md border border-slate-300 bg-slate-50 px-3 py-2 outline-none focus:border-slate-950 ${
-            editorSize === "large" ? "min-h-[420px]" : "min-h-32"
+            fillAvailableHeight
+              ? "min-h-0 flex-1 resize-none overflow-y-auto"
+              : editorSize === "large"
+                ? "min-h-[420px]"
+                : "min-h-32"
           }`}
           onChange={(event) => setContent(event.target.value)}
           required

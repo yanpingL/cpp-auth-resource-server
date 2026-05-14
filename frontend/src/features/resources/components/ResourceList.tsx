@@ -4,13 +4,18 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { clearAuthSession, getAuthToken } from "@/features/auth/authStore";
+import {
+  clearAuthSession,
+  getAuthToken,
+  getAuthUserName,
+} from "@/features/auth/authStore";
 import { deleteResource, listResources } from "../api";
 import type { Resource } from "../types";
 
 export function ResourceList() {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const [userName, setUserName] = useState("");
   const [resourceToDelete, setResourceToDelete] = useState<Resource | null>(
     null,
   );
@@ -19,7 +24,10 @@ export function ResourceList() {
   useEffect(() => {
     if (!getAuthToken()) {
       router.replace("/login");
+      return;
     }
+
+    setUserName(getAuthUserName() ?? "");
   }, [router]);
 
   const resourcesQuery = useQuery({
@@ -54,13 +62,13 @@ export function ResourceList() {
   const textCount = resourceCount - fileCount;
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-[#202124] px-6 py-10 text-white">
+    <main className="relative h-screen overflow-hidden bg-[#202124] px-6 py-10 text-white">
       <div
         aria-hidden="true"
         className="absolute inset-0 bg-[url('/user_space_background.jpg')] bg-cover bg-center"
       />
       <div aria-hidden="true" className="absolute inset-0 bg-black/55" />
-      <section className="relative z-10 mx-auto w-full max-w-6xl space-y-6">
+      <section className="relative z-10 mx-auto h-full w-full max-w-6xl space-y-6 overflow-y-auto">
         <div className="flex items-center justify-between gap-4">
           <Link
             className="inline-flex items-center gap-3 font-semibold transition hover:-translate-y-0.5 hover:text-white/70"
@@ -109,7 +117,9 @@ export function ResourceList() {
         <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
           <aside className="min-h-[68vh] space-y-4 rounded-lg border border-white/15 bg-white/90 p-5 text-slate-950 shadow-2xl shadow-black/20 backdrop-blur-sm">
             <div>
-              <p className="text-sm font-medium text-slate-500">User profile</p>
+              <p className="break-words text-sm font-medium text-slate-500">
+                {userName || "User profile"}
+              </p>
               <img
                 alt="User profile"
                 className="mx-auto mt-3 size-20 rounded-full border border-slate-200 bg-slate-950 object-cover shadow-sm"

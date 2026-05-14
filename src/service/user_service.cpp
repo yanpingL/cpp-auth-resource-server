@@ -55,6 +55,7 @@ json_type UserService::login(const UserInfo& Info) {
 
     res["token"] = token;
     res["user_id"] = user.id;
+    res["name"] = user.name;
 
     return res;
 }

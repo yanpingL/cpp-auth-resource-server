@@ -20,7 +20,7 @@ export function RegisterForm() {
       return loginUser({ email, password });
     },
     onSuccess: (data) => {
-      saveAuthSession(data.token, data.user_id);
+      saveAuthSession(data.token, data.user_id, data.name);
       router.push("/resources");
     },
   });
@@ -31,16 +31,17 @@ export function RegisterForm() {
   }
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#202124] px-6 text-slate-950">
+    <main className="relative h-screen overflow-hidden bg-[#202124] text-slate-950">
       <div
         aria-hidden="true"
         className="home-page-background absolute inset-0 bg-[url('/home_page.jpg')] bg-cover bg-center"
       />
       <div aria-hidden="true" className="absolute inset-0 bg-black/65" />
-      <form
-        className="relative z-10 w-full max-w-md space-y-5 rounded-lg border border-white/20 bg-white p-6 shadow-2xl shadow-black/30"
-        onSubmit={handleSubmit}
-      >
+      <div className="relative z-10 flex h-full items-center justify-center overflow-y-auto px-6 py-10">
+        <form
+          className="w-full max-w-md space-y-5 rounded-lg border border-white/20 bg-white p-6 shadow-2xl shadow-black/30"
+          onSubmit={handleSubmit}
+        >
         <div>
           <Link className="inline-flex items-center gap-3 font-semibold" href="/">
             <span className="flex size-10 items-center justify-center rounded-md bg-slate-950 text-xl font-bold text-white">
@@ -106,7 +107,8 @@ export function RegisterForm() {
             Login
           </Link>
         </p>
-      </form>
+        </form>
+      </div>
     </main>
   );
 }
