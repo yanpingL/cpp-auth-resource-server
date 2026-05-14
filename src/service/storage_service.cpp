@@ -16,6 +16,30 @@ struct MinioEndpoint {
     bool https;
 };
 
+std::string get_storage_env(
+    const char* s3_name,
+    const char* minio_name,
+    const std::string& fallback) {
+    const std::string s3_value = EnvUtils::get_env_or_default(s3_name, "");
+    if (!s3_value.empty()) {
+        return s3_value;
+    }
+
+    return EnvUtils::get_env_or_default(minio_name, fallback);
+}
+
+int get_storage_env_int(
+    const char* s3_name,
+    const char* minio_name,
+    int fallback) {
+    const std::string s3_value = EnvUtils::get_env_or_default(s3_name, "");
+    if (!s3_value.empty()) {
+        return EnvUtils::get_env_int_or_default(s3_name, fallback);
+    }
+
+    return EnvUtils::get_env_int_or_default(minio_name, fallback);
+}
+
 // Removes trailing slashes so endpoint strings can be joined predictably.
 std::string trim_trailing_slash(std::string value) {
     while (!value.empty() && value.back() == '/') {
@@ -46,7 +70,7 @@ MinioEndpoint parse_minio_endpoint(const std::string& endpoint) {
 // Creates a MinIO SDK base URL from the configured endpoint and region.
 minio::s3::BaseUrl make_minio_base_url(const std::string& endpoint) {
     const MinioEndpoint parsed = parse_minio_endpoint(endpoint);
-    const std::string region = EnvUtils::get_env_or_default("MINIO_REGION", "us-east-1");
+    const std::string region = get_storage_env("S3_REGION", "MINIO_REGION", "us-east-1");
     return minio::s3::BaseUrl(parsed.host, parsed.https, region);
 }
 
@@ -54,8 +78,8 @@ minio::s3::BaseUrl make_minio_base_url(const std::string& endpoint) {
 // Creates a static credential provider from the MinIO access key and secret.
 minio::creds::StaticProvider make_minio_provider() {
     return minio::creds::StaticProvider(
-        EnvUtils::get_env_or_default("MINIO_ACCESS_KEY", "minioadmin"),
-        EnvUtils::get_env_or_default("MINIO_SECRET_KEY", "minioadmin"));
+        get_storage_env("S3_ACCESS_KEY", "MINIO_ACCESS_KEY", "minioadmin"),
+        get_storage_env("S3_SECRET_KEY", "MINIO_SECRET_KEY", "minioadmin"));
 }
 
 // Replaces unsafe filename characters and rejects empty or dot-only names.
@@ -189,7 +213,7 @@ storage_json StorageService::create_upload_url(
     }
 
     const int max_filename_length =
-        EnvUtils::get_env_int_or_default("MINIO_MAX_FILENAME_LENGTH", 255);
+        get_storage_env_int("S3_MAX_FILENAME_LENGTH", "MINIO_MAX_FILENAME_LENGTH", 255);
     if (filename.size() > static_cast<std::size_t>(max_filename_length)) {
         res["error"] = "filename too long";
         return res;
@@ -213,9 +237,9 @@ storage_json StorageService::create_upload_url(
         return res;
     }
 
-    const std::string bucket = EnvUtils::get_env_or_default("MINIO_BUCKET", "webserver-files");
+    const std::string bucket = get_storage_env("S3_BUCKET", "MINIO_BUCKET", "webserver-files");
     const std::string public_endpoint = trim_trailing_slash(
-        EnvUtils::get_env_or_default("MINIO_PUBLIC_ENDPOINT", "http://localhost:9000"));
+        get_storage_env("S3_PUBLIC_ENDPOINT", "MINIO_PUBLIC_ENDPOINT", "http://localhost:9000"));
 
     const std::string object_key =
         "users/" + std::to_string(user_id) + "/uploads/" +
@@ -225,7 +249,7 @@ storage_json StorageService::create_upload_url(
         public_endpoint + "/" + bucket + "/" + object_key;
 
     const int expires_seconds =
-        EnvUtils::get_env_int_or_default("MINIO_UPLOAD_URL_EXPIRES", 300);
+        get_storage_env_int("S3_UPLOAD_URL_EXPIRES", "MINIO_UPLOAD_URL_EXPIRES", 300);
 
     storage_json upload = create_presigned_url(
         minio::http::Method::kPut,
@@ -252,9 +276,9 @@ storage_json StorageService::create_upload_url(
 storage_json StorageService::create_download_url(const std::string& public_url) {
     storage_json res;
 
-    const std::string bucket = EnvUtils::get_env_or_default("MINIO_BUCKET", "webserver-files");
+    const std::string bucket = get_storage_env("S3_BUCKET", "MINIO_BUCKET", "webserver-files");
     const std::string public_endpoint = trim_trailing_slash(
-        EnvUtils::get_env_or_default("MINIO_PUBLIC_ENDPOINT", "http://localhost:9000"));
+        get_storage_env("S3_PUBLIC_ENDPOINT", "MINIO_PUBLIC_ENDPOINT", "http://localhost:9000"));
 
     const std::string object_key =
         extract_object_key_from_public_url(public_url, public_endpoint, bucket);
@@ -264,7 +288,7 @@ storage_json StorageService::create_download_url(const std::string& public_url) 
     }
 
     const int expires_seconds =
-        EnvUtils::get_env_int_or_default("MINIO_DOWNLOAD_URL_EXPIRES", 300);
+        get_storage_env_int("S3_DOWNLOAD_URL_EXPIRES", "MINIO_DOWNLOAD_URL_EXPIRES", 300);
 
     storage_json download = create_presigned_url(
         minio::http::Method::kGet,
@@ -288,11 +312,11 @@ storage_json StorageService::create_download_url(const std::string& public_url) 
 
 // Deletes the MinIO object referenced by a public URL.
 bool StorageService::delete_file(const std::string& public_url, std::string& error) {
-    const std::string bucket = EnvUtils::get_env_or_default("MINIO_BUCKET", "webserver-files");
+    const std::string bucket = get_storage_env("S3_BUCKET", "MINIO_BUCKET", "webserver-files");
     const std::string public_endpoint = trim_trailing_slash(
-        EnvUtils::get_env_or_default("MINIO_PUBLIC_ENDPOINT", "http://localhost:9000"));
+        get_storage_env("S3_PUBLIC_ENDPOINT", "MINIO_PUBLIC_ENDPOINT", "http://localhost:9000"));
     const std::string internal_endpoint = trim_trailing_slash(
-        EnvUtils::get_env_or_default("MINIO_ENDPOINT", public_endpoint));
+        get_storage_env("S3_ENDPOINT", "MINIO_ENDPOINT", public_endpoint));
 
     const std::string object_key =
         extract_object_key_from_public_url(public_url, public_endpoint, bucket);

@@ -39,4 +39,9 @@ RUN git clone https://github.com/microsoft/vcpkg.git ${VCPKG_ROOT} \
 
 WORKDIR /workspace
 
-CMD ["bash"]
+COPY . .
+
+RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
+    && cmake --build build --target webserver --parallel 2
+
+CMD ["./build/bin/webserver", "8080"]

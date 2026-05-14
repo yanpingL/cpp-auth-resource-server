@@ -102,6 +102,7 @@ private:
 
     HTTP_CODE handle_create_upload_url(char* text);
     HTTP_CODE handle_create_download_url();
+    HTTP_CODE handle_health();
 
     // Static file serve
     HTTP_CODE do_request();

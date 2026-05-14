@@ -344,6 +344,9 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char * text){
     if(strncmp(m_url, "/api/files/download-url", 23) == 0){
         apireq = 6;
     }
+    if(strcmp(m_url, "/health") == 0){
+        apireq = 7;
+    }
 
     // Static file requests may arrive with an absolute URL.
     if (strncasecmp(m_url, "http://", 7) == 0 ){
@@ -374,6 +377,9 @@ http_conn::HTTP_CODE http_conn::parse_headers(char * text){
         }
         if (apireq == 6 && m_method == GET){
             return handle_create_download_url();
+        }
+        if (apireq == 7 && m_method == GET){
+            return handle_health();
         }
 
         if (m_content_length != 0 ) {
@@ -804,6 +810,15 @@ http_conn::HTTP_CODE http_conn::handle_create_download_url() {
     if (res.contains("error")) {
         return BAD_REQUEST;
     }
+    return GET_RESOURCE;
+}
+
+
+// Handle GET /health for load balancer and container health checks.
+http_conn::HTTP_CODE http_conn::handle_health() {
+    json res;
+    res["status"] = "ok";
+    json_res = res.dump();
     return GET_RESOURCE;
 }
 

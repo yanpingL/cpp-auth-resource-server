@@ -8,6 +8,12 @@ server
 build/
 *.log
 
+# env files
+.env
+.env.*
+!.env.example
+!.env.production.example
+
 .devcontainer/
 
 # mac

@@ -491,14 +491,14 @@ POSTGRES_PASSWORD: webpass123
 POSTGRES_HOST: postgres
 POSTGRES_PORT: 5432
 
-MINIO_ENDPOINT: http://minio:9000
-MINIO_PUBLIC_ENDPOINT: http://localhost:9000
-MINIO_BUCKET: webserver-files
-MINIO_ACCESS_KEY: minioadmin
-MINIO_SECRET_KEY: minioadmin
-MINIO_UPLOAD_URL_EXPIRES: 300
-MINIO_DOWNLOAD_URL_EXPIRES: 300
-MINIO_MAX_FILENAME_LENGTH: 255
+S3_ENDPOINT: http://minio:9000
+S3_PUBLIC_ENDPOINT: http://localhost:9000
+S3_BUCKET: webserver-files
+S3_ACCESS_KEY: minioadmin
+S3_SECRET_KEY: minioadmin
+S3_UPLOAD_URL_EXPIRES: 300
+S3_DOWNLOAD_URL_EXPIRES: 300
+S3_MAX_FILENAME_LENGTH: 255
 
 JWT_SECRET: change-me-to-a-long-random-secret-before-production
 JWT_ISSUER: webserver
@@ -506,6 +506,53 @@ JWT_EXPIRES_SECONDS: 3600
 ```
 
 Use a strong random `JWT_SECRET` for real deployments. The sample value is only for local development.
+
+### Production Environment Variables
+
+Use `.env.production.example` as the deployment checklist for the backend. Do
+not commit a real production `.env` file.
+
+Backend values belong in the ECS task definition. Sensitive values should come
+from AWS Secrets Manager or SSM Parameter Store instead of plain text task
+environment variables.
+
+```text
+POSTGRES_HOST
+POSTGRES_PORT
+POSTGRES_DB
+POSTGRES_USER
+POSTGRES_PASSWORD  # secret
+
+JWT_SECRET         # secret
+JWT_ISSUER
+JWT_EXPIRES_SECONDS
+
+S3_ENDPOINT
+S3_PUBLIC_ENDPOINT
+S3_BUCKET
+S3_ACCESS_KEY   # secret, unless replaced by an IAM role flow later
+S3_SECRET_KEY   # secret, unless replaced by an IAM role flow later
+S3_REGION
+S3_UPLOAD_URL_EXPIRES
+S3_DOWNLOAD_URL_EXPIRES
+S3_MAX_FILENAME_LENGTH
+```
+
+The backend prefers `S3_*` names for application storage settings. Legacy
+`MINIO_*` names still work as fallbacks for older local environments. MinIO
+server-specific values such as `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`, and
+`MINIO_API_CORS_ALLOW_ORIGIN` are still used only by the local MinIO container.
+
+Frontend values belong in the Vercel project environment variables:
+
+```text
+API_BASE_URL
+```
+
+Set `API_BASE_URL` to the public backend origin, for example
+`https://api.example.com`. Do not include `/api`; the frontend rewrite appends
+that path. Vercel environment variable changes affect new deployments, so
+redeploy the frontend after changing this value.
 
 MinIO console login:
 
@@ -516,6 +563,10 @@ Password: minioadmin
 ```
 
 The `webserver-files` bucket is created automatically by `sys-minio-init`.
+Local MinIO allows browser file upload/preview requests from the Next.js dev
+origin through `MINIO_API_CORS_ALLOW_ORIGIN` in `docker-compose.yml`.
+`deploy/minio/cors.xml` is kept as a production bucket CORS policy template for
+S3-compatible storage that supports bucket-level CORS configuration.
 
 ## Run The Project
 
@@ -532,12 +583,23 @@ docker compose build
 docker compose up -d
 ```
 
+The backend Docker image builds `build/bin/webserver` during image build and
+starts it with:
+
+```bash
+./build/bin/webserver 8080
+```
+
 During startup, Docker Compose also runs two idempotent initialization jobs:
 
 - `db-init`: applies `db/schema.sql` and creates PostgreSQL tables with `CREATE TABLE IF NOT EXISTS`.
 - `minio-init`: creates the `webserver-files` bucket with `mc mb --ignore-existing`.
 
 If the tables or bucket already exist, these jobs leave them unchanged.
+
+For production S3-compatible storage, apply an equivalent bucket CORS policy for
+the deployed frontend origin. Keep `PUT`, `GET`, and `HEAD` allowed, allow the
+`Content-Type` request header, and expose `ETag`.
 
 To run the initialization jobs manually for verification:
 
@@ -549,31 +611,6 @@ To validate the Compose file itself:
 
 ```bash
 docker compose config
-```
-
-Build the C++ server inside both web containers:
-
-```bash
-docker exec sys-web-1 bash -lc "cd /workspace && cmake -S . -B build && cmake --build build"
-docker exec sys-web-2 bash -lc "cd /workspace && cmake -S . -B build && cmake --build build"
-```
-
-Start the server process from inside each web container.
-
-In one terminal, enter the first container and run the server:
-
-```bash
-docker exec -it sys-web-1 bash
-cd /workspace
-./build/bin/webserver 8080
-```
-
-In a second terminal, enter the second container and run the server:
-
-```bash
-docker exec -it sys-web-2 bash
-cd /workspace
-./build/bin/webserver 8080
 ```
 
 Check that the containers are running:
@@ -588,6 +625,14 @@ The main API entry point is:
 ```text
 http://localhost:8080
 ```
+
+The health check endpoint is:
+
+```text
+GET http://localhost:8080/health
+```
+
+It returns `200 {"status":"ok"}` without requiring authentication.
 
 This goes through Nginx and load-balances between `web1` and `web2`.
 
