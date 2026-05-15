@@ -21,7 +21,7 @@
 
 
 
-#define MAX_FD 65535  // maximum #file descriptors
+#define DEFAULT_MAX_FD 4096  // default maximum #file descriptors/connections
 #define MAX_EVENT_NUMBER 10000  // maximum #events to be listned
 
 // Installs a process signal handler.
@@ -64,6 +64,12 @@ int main(int argc, char* argv[]){
         return 1;
     }
 
+    const int max_fd = EnvUtils::get_env_int_or_default("MAX_FD", DEFAULT_MAX_FD);
+    if (max_fd <= 0) {
+        Logger::get_instance()->log(ERROR, "invalid MAX_FD configuration");
+        return 1;
+    }
+
     threadpool<http_conn> * pool = NULL;
     try{
         pool = new threadpool<http_conn>(10, 10000);
@@ -82,7 +88,7 @@ int main(int argc, char* argv[]){
     );
 
     // Connection objects are indexed directly by socket fd.
-    http_conn * users = new http_conn[MAX_FD];
+    http_conn * users = new http_conn[max_fd];
 
     int listenfd = socket(PF_INET, SOCK_STREAM, 0);
     if (listenfd == -1){
@@ -132,7 +138,7 @@ int main(int argc, char* argv[]){
                     continue;
                 }
 
-                if(http_conn::m_user_count >= MAX_FD) {
+                if(http_conn::m_user_count >= max_fd || connfd >= max_fd) {
                     close(connfd);
                     continue;
                 }

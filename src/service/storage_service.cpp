@@ -6,8 +6,14 @@
 #include <algorithm>
 #include <chrono>
 #include <cctype>
+#include <ctime>
+#include <iomanip>
+#include <openssl/hmac.h>
+#include <openssl/sha.h>
+#include <sstream>
 #include <string>
 #include <set>
+#include <vector>
 
 namespace {
 
@@ -144,6 +150,128 @@ bool is_blocked_extension(const std::string& filename) {
     return blocked.count(file_extension(filename)) > 0;
 }
 
+std::string method_name(minio::http::Method method) {
+    if (method == minio::http::Method::kPut) {
+        return "PUT";
+    }
+    return "GET";
+}
+
+std::string hex_encode(const unsigned char* data, std::size_t len) {
+    std::ostringstream out;
+    out << std::hex << std::setfill('0');
+    for (std::size_t i = 0; i < len; ++i) {
+        out << std::setw(2) << static_cast<int>(data[i]);
+    }
+    return out.str();
+}
+
+std::string sha256_hex(const std::string& value) {
+    unsigned char hash[SHA256_DIGEST_LENGTH];
+    SHA256(reinterpret_cast<const unsigned char*>(value.data()), value.size(), hash);
+    return hex_encode(hash, SHA256_DIGEST_LENGTH);
+}
+
+std::string hmac_sha256(const std::string& key, const std::string& value) {
+    unsigned int len = EVP_MAX_MD_SIZE;
+    unsigned char hash[EVP_MAX_MD_SIZE];
+    HMAC(EVP_sha256(),
+        key.data(),
+        static_cast<int>(key.size()),
+        reinterpret_cast<const unsigned char*>(value.data()),
+        value.size(),
+        hash,
+        &len);
+    return std::string(reinterpret_cast<char*>(hash), len);
+}
+
+std::string aws_encode(const std::string& value, bool encode_slash) {
+    std::ostringstream out;
+    out << std::uppercase << std::hex << std::setfill('0');
+    for (unsigned char c : value) {
+        const bool unreserved =
+            std::isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~';
+        if (unreserved || (!encode_slash && c == '/')) {
+            out << c;
+        } else {
+            out << '%' << std::setw(2) << static_cast<int>(c);
+        }
+    }
+    return out.str();
+}
+
+std::string utc_timestamp(const char* format) {
+    const std::time_t now = std::time(nullptr);
+    std::tm tm{};
+    gmtime_r(&now, &tm);
+
+    char buffer[32];
+    std::strftime(buffer, sizeof(buffer), format, &tm);
+    return buffer;
+}
+
+storage_json create_aws_presigned_url(
+    minio::http::Method method,
+    const std::string& bucket,
+    const std::string& object_key,
+    int expires_seconds) {
+
+    storage_json res;
+
+    const std::string access_key = get_storage_env("S3_ACCESS_KEY", "MINIO_ACCESS_KEY", "");
+    const std::string secret_key = get_storage_env("S3_SECRET_KEY", "MINIO_SECRET_KEY", "");
+    const std::string region = get_storage_env("S3_REGION", "MINIO_REGION", "us-east-1");
+    if (access_key.empty() || secret_key.empty()) {
+        res["error"] = "missing S3 credentials";
+        return res;
+    }
+
+    const std::string host = bucket + ".s3." + region + ".amazonaws.com";
+    const std::string amz_date = utc_timestamp("%Y%m%dT%H%M%SZ");
+    const std::string date = utc_timestamp("%Y%m%d");
+    const std::string credential_scope = date + "/" + region + "/s3/aws4_request";
+    const std::string signed_headers = "host";
+
+    const std::string canonical_uri = "/" + aws_encode(object_key, false);
+    const std::string canonical_query =
+        "X-Amz-Algorithm=AWS4-HMAC-SHA256"
+        "&X-Amz-Credential=" + aws_encode(access_key + "/" + credential_scope, true) +
+        "&X-Amz-Date=" + amz_date +
+        "&X-Amz-Expires=" + std::to_string(expires_seconds) +
+        "&X-Amz-SignedHeaders=" + signed_headers;
+    const std::string canonical_headers = "host:" + host + "\n";
+    const std::string canonical_request =
+        method_name(method) + "\n" +
+        canonical_uri + "\n" +
+        canonical_query + "\n" +
+        canonical_headers + "\n" +
+        signed_headers + "\n" +
+        "UNSIGNED-PAYLOAD";
+
+    const std::string string_to_sign =
+        "AWS4-HMAC-SHA256\n" +
+        amz_date + "\n" +
+        credential_scope + "\n" +
+        sha256_hex(canonical_request);
+
+    const std::string signing_key =
+        hmac_sha256(
+            hmac_sha256(
+                hmac_sha256(
+                    hmac_sha256("AWS4" + secret_key, date),
+                    region),
+                "s3"),
+            "aws4_request");
+    const std::string signature = hex_encode(
+        reinterpret_cast<const unsigned char*>(
+            hmac_sha256(signing_key, string_to_sign).data()),
+        SHA256_DIGEST_LENGTH);
+
+    res["url"] = "https://" + host + canonical_uri + "?" +
+        canonical_query + "&X-Amz-Signature=" + signature;
+    return res;
+}
+
 // Returns the current Unix timestamp in milliseconds for unique object keys.
 long long current_epoch_millis() {
     using namespace std::chrono;
@@ -160,6 +288,10 @@ storage_json create_presigned_url(
     int expires_seconds) {
 
     storage_json res;
+    if (endpoint.find("amazonaws.com") != std::string::npos) {
+        return create_aws_presigned_url(method, bucket, object_key, expires_seconds);
+    }
+
     minio::s3::BaseUrl base_url = make_minio_base_url(endpoint);
     minio::creds::StaticProvider provider = make_minio_provider();
     minio::s3::Client client(base_url, &provider);

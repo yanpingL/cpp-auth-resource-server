@@ -1,0 +1,55 @@
+{
+  "family": "webserver-backend",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::984053725330:role/ecsTaskExecutionRole",
+  "runtimePlatform": {
+    "cpuArchitecture": "ARM64",
+    "operatingSystemFamily": "LINUX"
+  },
+  "containerDefinitions": [
+    {
+      "name": "webserver-backend",
+      "image": "984053725330.dkr.ecr.ap-southeast-2.amazonaws.com/webserver-backend@sha256:1a7dda17bd5343cc79fea3efc6e08da75078a2afd768a610b73617193396a273",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 8080,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        { "name": "POSTGRES_HOST", "value": "webserver-postgres.cruguwaqgtwy.ap-southeast-2.rds.amazonaws.com" },
+        { "name": "POSTGRES_PORT", "value": "5432" },
+        { "name": "POSTGRES_DB", "value": "webdb" },
+        { "name": "POSTGRES_USER", "value": "webuser" },
+        { "name": "S3_ENDPOINT", "value": "https://s3.amazonaws.com" },
+        { "name": "S3_PUBLIC_ENDPOINT", "value": "https://s3.amazonaws.com" },
+        { "name": "S3_BUCKET", "value": "webserver-files-984053725330-ap-southeast-2" },
+        { "name": "S3_REGION", "value": "ap-southeast-2" },
+        { "name": "S3_UPLOAD_URL_EXPIRES", "value": "300" },
+        { "name": "S3_DOWNLOAD_URL_EXPIRES", "value": "300" },
+        { "name": "S3_MAX_FILENAME_LENGTH", "value": "255" },
+        { "name": "MAX_FD", "value": "4096" },
+        { "name": "JWT_ISSUER", "value": "webserver" },
+        { "name": "JWT_EXPIRES_SECONDS", "value": "3600" }
+      ],
+      "secrets": [
+        { "name": "POSTGRES_PASSWORD", "valueFrom": "arn:aws:secretsmanager:ap-southeast-2:984053725330:secret:webserver/prod/postgres-password-7rcipj" },
+        { "name": "JWT_SECRET", "valueFrom": "arn:aws:secretsmanager:ap-southeast-2:984053725330:secret:webserver/prod/jwt-secret-vcfmTa" },
+        { "name": "S3_ACCESS_KEY", "valueFrom": "arn:aws:secretsmanager:ap-southeast-2:984053725330:secret:webserver/prod/s3-access-key-5YQWA6" },
+        { "name": "S3_SECRET_KEY", "valueFrom": "arn:aws:secretsmanager:ap-southeast-2:984053725330:secret:webserver/prod/s3-secret-key-uPOZpD" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/webserver",
+          "awslogs-region": "ap-southeast-2",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}
